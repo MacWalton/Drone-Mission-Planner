@@ -1,0 +1,27 @@
+[general]
+name=Drone Mission Planner
+qgisMinimumVersion=3.22
+qgisMaximumVersion=4.99
+supportsQt6=True
+description=Plan drone mapping missions (area grids and route corridors) from drawn polygons or GIS/CAD files, and send them to DJI, ArduPilot, PX4, Litchi and Autel aircraft.
+about=Draw or import a boundary (Shapefile, GeoPackage, GeoJSON, KML, DXF/DWG CAD and any OGR format), choose the coordinate system, pick take-off and landing points, set flying height or ground pixel size (GSD), overlaps and heading, and get a mission tuned for wind, temperature, altitude and payload with automatic battery splitting. Exports DJI WPML KMZ (Pilot 2 / FlightHub 2), QGroundControl .plan, Mission Planner .waypoints, Litchi CSV, KML, GeoJSON and CSV, and uploads live to MAVLink autopilots. Optional terrain following from a DEM. Large jobs are split into battery-sized flights across multiple launch stations with a field schedule; linear features (roads, pipelines, powerlines, rail, rivers) can be picked on the map, chained and mapped by chainage.
+version=1.7.0
+author=Drone Mission Planner
+email=macalister.walton@gmail.com
+category=Plugins
+tags=drone,uav,uas,mission,photogrammetry,mapping,survey,dji,ardupilot,px4,litchi,flight planning,gsd
+homepage=https://github.com/MacWalton/Drone-Mission-Planner
+tracker=https://github.com/MacWalton/Drone-Mission-Planner/issues
+repository=https://github.com/MacWalton/Drone-Mission-Planner
+experimental=False
+deprecated=False
+icon=icon.png
+hasProcessingProvider=no
+changelog=1.7.0 DJI Mini 3 Pro / Mini 4 Pro / Mini 5 Pro profiles (standard and Plus batteries); photo trigger modes (distance, camera timed shot, stop & shoot with hover); DJI Fly template aircraft codes and replace-a-DJI-Fly-mission upload; field-brief maps over a basemap (current map, OpenStreetMap, Esri imagery/topographic) with attribution.
+    1.6.0 Minimum height above ground (trees, powerlines, buildings) applied to survey, transits and returns, kept over rising ground with a DEM; obstacle layer (points, lines, polygons with heights) with local climbs over obstacles, margin and buffer; obstacle clearance check; obstacles on the brief map.
+    1.5.0 Field brief: mission overview map (flights numbered and coloured, stations, transits, terrain warnings, chainage, scale bar, north arrow), zoomed section maps for multi-station routes, optional background from visible QGIS layers. Mission name (typed or automatic) on the brief, report, KML and export file names.
+    1.4.0 Payload list: name, weight (kg or lb) and power draw (W) for each item carried; weight and accessory power both reduce flight time; battery capacity editable; payload shown in report and field brief.
+    1.3.0 Height units (metres or feet) for flying height, return-to-take-off height, battery-change height, elevations and terrain limits; separate return-to-home and battery-change heights flown explicitly in every mission file; MAVLink upload also sets the failsafe RTL altitude.
+    1.2.0 DEM: one-click download (Copernicus GLO-30 or AWS Terrain Tiles), terrain clearance and height-limit checks on every flight path incl. transits, terrain-safe transits, GSD/overlap over terrain, route elevation profile.
+    1.1.0 Battery-change planning: multiple launch stations (manual or auto-placed), mid-line battery changes with resume overlap, VLOS range limit, leapfrog option, field schedule (battery sets, chargers, charge/swap/drive times) and printable field brief. Linear-feature route mapping: pick and chain road/pipeline/powerline pieces, chainage window, left/right widths, simplification, battery/range-sized sections, chainage markers.
+    1.0.0 First release

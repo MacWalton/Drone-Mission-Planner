@@ -1,0 +1,381 @@
+# Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox  (v1.7)
+
+Plan drone mapping missions from a drawn polygon/line or an imported GIS/CAD file, tune them for wind,
+temperature, altitude and payload, plan the battery changes for big jobs and long linear features, and send
+the flights to the aircraft. One shared planning engine
+(`dronemapper_core`) drives both GIS front-ends, so both give identical missions.
+
+Download the install zips from the repository's **Releases** page, or build them yourself (see *Development*).
+
+| Package | Install |
+|---|---|
+| `drone_mission_planner_qgis.zip` | QGIS 3.22+ (Qt5) and QGIS 4 (Qt6): **Plugins ▸ Manage and Install Plugins ▸ Install from ZIP**. A toolbar button opens the planner panel. |
+| `DroneMissionPlanner_ArcGISPro.zip` | ArcGIS Pro 2.9+: unzip anywhere, then **Catalog ▸ Toolboxes ▸ Add Toolbox** and pick `DroneMissionPlanner.pyt` (keep the `dronemapper_core` folder next to it). |
+
+Live MAVLink upload needs **pymavlink** (optional):
+- QGIS: open the *OSGeo4W Shell* → `python -m pip install pymavlink`, restart QGIS.
+- ArcGIS Pro: *Package Manager* → clone the default environment → add `pymavlink` (or `python -m pip install pymavlink` in the clone's Python Command Prompt).
+
+---
+
+## Workflow
+
+0. **Mission name** – type one, or leave it blank for an automatic name built from the boundary layer/file
+   name (or "Area/Route mission" + date). It titles the field brief and report, names the KML, and is the
+   default file name for every export.
+1. **Boundary** – choose *Area mapping* (grid) or *Route/corridor mapping* (linear features — see below), then:
+   - **Draw** on the map (QGIS: click vertices, right-click/Enter to finish, Backspace undo, Esc cancel;
+     ArcGIS: pencil button on the input parameter), or
+   - **Import** Shapefile, GeoPackage, GeoJSON, KML/KMZ, GML, MapInfo, FileGDB, CSV, **DXF/DWG CAD**. Closed CAD
+     polylines are converted to polygons automatically; files without a CRS are assumed to be in the project/map CRS (you're told when this happens), or
+   - **Use an existing layer** (selected features, or all).
+2. **Change the boundary** – QGIS: *Edit boundary vertices* (drag/add/delete vertices; the mission re-plans live).
+   ArcGIS: edit the output `_boundary` feature class and run the tool again on it.
+3. **Take-off, launch stations & landing** – pick the take-off (S1), add more launch stations for battery
+   changes, or *Auto-place stations*. An optional final landing point can differ from take-off (DJI missions end
+   with *no action* there so the pilot lands). All points can be dragged later and the plan updates.
+4. **Coordinate system** – automatic UTM zone, or any projected CRS (MGA2020/GDA2020, State Plane, ETRS89 …).
+   Output layers use this CRS; drone files are always WGS84.
+5. **Aircraft & camera** – pick a profile (DJI M3E, M350+P1, P4 RTK, **Mini 3 Pro / Mini 4 Pro / Mini 5 Pro** (standard and Plus batteries), Air 3, Autel EVO II, generic
+   ArduPilot/PX4 quad and fixed-wing). Every sensor/battery value is editable for custom rigs.
+6. **Flight parameters** – **height units (metres or feet)**, flying height **or** ground pixel size (GSD; the
+   other updates automatically), **return-to-take-off height** and **battery-change height** (see below), **minimum height above
+   ground** (see *Minimum height and obstacles*),
+   front/side overlap, line heading (auto fewest lines / manual / align with wind), crosshatch for 3D,
+   coverage margin, run-in/out, speed (auto-optimised or fixed), gimbal pitch, shutter, portrait camera,
+   **photo trigger** (every N m / camera timed shot / stop & shoot — see *DJI Mini Pro series*).
+7. **Conditions & terrain** – wind speed & direction, temperature, take-off elevation (or *From DEM*), the
+   **payload list** (see below),
+   battery reserve & health. **DEM**: pick one you have, or click *Download DEM* (see below) – used for terrain
+   following, per-station heights, safe transits, terrain checks and the route profile.
+8. **Battery changes & field schedule** – see below.
+9. **Plan** – layers: boundary, survey legs, flight routes (coloured per battery, with launch station, battery
+   set, clock times and KP range), waypoints, photo centres, launch stations, chainage markers. The report
+   gives GSD, spacing, photo count, time and battery use per flight, plus the field schedule.
+10. **Export / upload** (see below), including a printable **field brief** with mission maps drawn over a
+    **basemap** (see *Field-brief basemap*).
+
+## Big jobs: battery changes & launch stations
+
+Large areas and long routes need many batteries. The planner builds the whole day, not just the flight lines:
+
+- **Mid-line battery changes** – each flight uses its battery fully: when the battery (after reserve) is due,
+  the flight stops part-way along a line, returns, and the next battery resumes at that exact point with one
+  photo of overlap, so there are no gaps. (Untick it to change batteries only at line ends.)
+- **Several launch stations** – add stations by clicking, or *Auto-place stations*: on an area, a grid sized so
+  every point is within your range limit; on a route, one per section, offset from the line if you like (e.g.
+  onto the access track). Drag them to real access points and the plan updates. The survey is split into
+  station zones, each flight launches from the station that owns its part of the survey, and zones are visited
+  in a short driving order (several orderings are tried and the best kept).
+- **Maximum distance from pilot (VLOS)** – flights are cut where they would go further than this from their
+  launch station, exactly like a battery cut, and resumed from a station that can reach the rest.
+- **Return or leapfrog** – by default each flight lands back at its own station and the crew drives to the next
+  one. *Leapfrog* lets flights land at the next station instead (the crew moves with the aircraft) — less
+  driving, but needs the right approvals/crew.
+- **Heights per station** – heights are relative to each flight's launch point. With a DEM, each station's
+  ground height is used (and terrain following works across stations); without one, a warning reminds you
+  that ground is assumed level between stations.
+- **Field schedule** – battery sets on site, chargers, charge time, swap/pre-flight time, setup, drive speed and
+  pack-up time per move, and arrival time give a clock-time plan: which set flies which flight, waits for
+  charging, drives, and total time on site, plus how many battery sets would remove waiting.
+- **Field brief** (`.html`, prints well) – mission name, summary, **mission map**, station coordinates, payload,
+  terrain section and a flight-by-flight table (launch → land, battery set, start/end, battery %, photos, KP
+  range, notes) with tick boxes.
+  - **Mission map**: boundary/corridor, every flight (survey lines solid, transits dashed) numbered on the map,
+    launch stations, final landing, obstacles, terrain warnings, chainage, scale bar and north arrow. Up to 8
+    flights get distinct colours; more use a light-to-dark blue in flight order. Hover a flight for its times,
+    battery set and %.
+  - **Section maps**: routes with several launch stations get a zoomed map per station.
+  - **Background**: in QGIS, the layers visible in your map (aerial imagery, basemap, cadastre…) are rendered
+    under the brief maps – untick *Field brief: show visible map layers* for a plain map. In ArcGIS the maps
+    are drawn without a background.
+- Every flight is exported as its own file with its own home position, ready to fly in order.
+
+## Heights: metres or feet, return-to-take-off and battery-change heights
+
+- **Height units** – choose *Metres* or *Feet* (QGIS: top of *Flight parameters*, remembered between sessions;
+  ArcGIS: *Height units*). It applies to every height and elevation you enter or read: flying height,
+  return-to-take-off height, battery-change height, take-off elevation, terrain clearance and height limit, the
+  report, the field brief and the profile chart. Switching converts the numbers already entered. Mission files
+  are always written in metres (what the aircraft expect), so 400 ft becomes exactly 121.92 m.
+- **Return-to-take-off height** – the height for the final flight home (blank = flying height). The aircraft
+  climbs to it at the last survey point, flies home at that height and lands. It's written as explicit
+  waypoints in every format, so it doesn't depend on the aircraft's own RTH setting. On live MAVLink upload the
+  autopilot's failsafe return altitude is also set to it (ArduPilot `RTL_ALT`, PX4 `RTL_RETURN_ALT`).
+  On DJI, still set the RTH altitude in Pilot 2 for failsafes: the mission flies home at your height, but a
+  signal-loss return uses the aircraft setting.
+- **Battery-change height** – the height for flights coming home to swap a battery and for the next flight
+  flying back out to resume (blank = return height).
+- Neither height is ever used to descend over high ground: with a DEM, terrain-safe transits can raise them
+  but never lower them. Both appear in the report and brief, and you're warned if one is above 120 m (400 ft).
+
+## Elevation (DEM): download, terrain safety checks, route profile
+
+- **Download DEM** (QGIS: section 6; ArcGIS: *Download DEM* tool, or *If no DEM is given, download one* on the
+  mission tools) fetches free elevation for the mission area plus a margin, saves it as a GeoTIFF (QGIS: in a
+  `dem` folder next to your project) and loads it. Take-off elevation is filled in from it automatically.
+  - **Copernicus GLO-30** – 30 m, global, a *surface* model (includes trees and buildings – the safest choice
+    for clearance). Reads only the window you need. Needs GDAL, so QGIS (or ArcGIS with GDAL installed).
+  - **AWS Terrain Tiles** – ~10–30 m, global, mostly a *terrain* model from SRTM and national DEMs. Works in
+    ArcGIS Pro with no extra installs.
+  Missing tiles (open sea) are set to 0 m and you're told. Both are free with no account; attribution is shown
+  when loaded. Uses your normal internet connection/proxy.
+- **Terrain-safe transits** – with a DEM, the climb-out and the flight home are checked against the ground:
+  with terrain following they follow the terrain at the flying height; otherwise they climb just enough to
+  clear the highest ground on the way (≥ 30 m or half the flying height). Flights are re-budgeted so the extra
+  climbing still fits in the battery.
+- **Terrain check** (on by default when a DEM is present) follows every flight's real 3D path – vertical climb,
+  transits, survey lines, return – and reports:
+  - spots where clearance drops below your minimum (default 30 m) – including flights that would hit a hill;
+  - spots above your height limit (default 120 m AGL) where the ground falls away from the launch point;
+  - the real GSD range and the worst front/side overlap over the terrain;
+  - what to do about it (terrain following, raise height by N m, move the launch point…).
+  Problem spots appear as a *Terrain warnings* layer (QGIS) / `_terrain` feature class (ArcGIS) and in the
+  report and field brief.
+- **Route elevation profile** – ground vs. flight altitude by chainage (KP): a chart in the QGIS panel (hover for
+  values), an SVG chart in the field brief, and a `_profile` table in ArcGIS (chart it with *Create Chart ▸
+  Line*). Low-clearance spots are marked in red.
+
+## Linear features: roads, pipelines, powerlines, rail, rivers
+
+Choose *Route / corridor mapping*, then:
+
+- **Pick line features on map** – click the pieces of the road/pipeline in any visible line layer (click again to
+  drop one; right-click or Enter when done). Pieces in any order or direction — including multi-feature CAD
+  or GIS layers via *Use layer* / *Import* — are **chained into one route**, and you're warned about any gap
+  bridged between pieces that don't touch.
+- **Chainage (KP)** – map just part of a long feature (e.g. KP 2.5 – 9.0), reverse the KP direction if needed,
+  and add chainage markers every N metres (labelled `KP 4.500`). Each flight reports the KP range it covers.
+- **Corridor shape** – separate widths left and right of the line (e.g. 40 m upslope, 25 m downslope), automatic
+  or fixed number of flight lines, and line simplification to remove digitising noise.
+- **Sections** – long routes are flown section by section: each section's lines are flown back and forth before
+  moving on, so batteries and launch stations line up along the route. Section length is automatic (sized to
+  one battery and the range limit), fixed, or off.
+
+## ArcGIS Pro equivalents
+
+The *Create Area/Route Mapping Mission* tools have the same options in parameter groups: the take-off input
+accepts several points (first = S1, others = launch stations), *Launch stations & range*, *Battery changes &
+field schedule* and (route) *Linear feature & corridor*. Multi-feature line inputs are chained automatically.
+Extra outputs: `_site` (stations with S-labels and flight counts), `_chainage` and a `_schedule` table.
+To move auto-placed stations, edit `_site` and feed it back as the take-off input.
+
+## Flight-time optimisation
+
+The rated endurance (sea level, 15 °C, no wind, no payload) is scaled by:
+
+- **Payload weight** – lift power ∝ mass^1.5 (heavier = shorter flights).
+- **Accessory power** – lights, sensors and other items powered from the flight battery drain it directly,
+  on top of the power to fly.
+- **Altitude & temperature** – air density (ISA) at take-off elevation + flight height; thin air costs power.
+- **Cold batteries** – usable capacity drops below ~20 °C (85 % at 0 °C, 70 % at −10 °C).
+- **Wind** – every leg is costed with its real airspeed (multirotor) or ground speed (fixed-wing), so headwind
+  legs, tailwind legs and crosswind all count.
+- **Reserve & battery health** – always held back.
+
+The planner then picks the **speed that minimises energy per metre** within the camera's limits (photo interval
+and motion blur), and **splits the mission into per-battery flights**, each returning to land with the reserve
+intact. *Align with wind* heading flies lines into/with the wind, which usually costs less than crosswind
+crabbing on windy days. The ArcGIS **Flight Time Calculator** shows usable minutes, area per battery and a wind
+sensitivity table before you go to site.
+
+It's a planning estimate: keep a 20–30 % reserve and watch live battery telemetry.
+
+## Minimum height and obstacles (trees, powerlines, buildings)
+
+- **Minimum height above ground** – the lowest the aircraft may ever be: set it above the tree canopy,
+  powerlines and buildings on site. If the flying height is lower it is raised to the minimum (you're told the
+  new GSD). It also applies to the flight out, battery-change returns and the return home. With a DEM it is
+  kept where the ground rises above the launch point (the aircraft climbs only where needed).
+- **Obstacle layer** (optional) – any point, line or polygon layer: powerlines and poles, towers and masts,
+  building footprints, tree stands. Pick its **height field** (auto-detected for names like `HEIGHT`, `HGT`,
+  `BLDG_HT`) or use a **default height** for every feature, then set the **vertical margin** (clearance above
+  the tops, default 10 m) and **horizontal buffer** (distance kept sideways, default 15 m). Selected features
+  only, if some are selected. Heights are in the chosen height units.
+- The aircraft climbs **only where it passes over or near an obstacle** and descends again afterwards; climbs
+  start before the obstacle zone and each leg is sampled at every obstacle edge, so even a leg that clips the
+  corner of a building's zone is caught. Extra climbing is included in the battery plan.
+- A launch station inside an obstacle's buffer gets a warning (the aircraft climbs vertically there – move it
+  to open ground).
+- The terrain & obstacle check reports any spot closer than your margin to an obstacle top. When a minimum
+  height is set, the ground-clearance check uses it as its limit. Obstacles appear on the brief map (hatched
+  polygons, dotted lines, point symbols) with heights on hover.
+- Tested: a 28 m powerline, 18 m shed, 25 m tree stand and 45 m mast flown at 30 m – clearance measured every
+  metre along every flight stays at the 10 m margin; a route through 2,000 building footprints plans in ~4 s.
+
+## Payload list
+
+List everything the aircraft carries – camera or sensor, lights, LiDAR, gimbal, mounts, parachute… – with a
+**name**, **weight** and **power drawn from the flight battery** in watts (0 if it has its own battery).
+
+- QGIS: the table in section 6 (*Add item* / *Remove*, double-click to edit, weights in **kg or lb**). The list
+  is remembered between sessions. The total turns red if it's over the aircraft's payload limit.
+- ArcGIS: the *Payload carried* table on the mission tools and the Flight Time Calculator, with a kg/lb choice
+  and an *Other payload not listed* box. The dialog warns when the total is over the limit.
+- Both **weight and power** count toward flight time: weight raises the power needed to fly; accessory
+  watts are drawn on top for the whole flight, including the climb, the transits and the trip home. Battery
+  splitting, the return reserve and the schedule all use the combined figure.
+- Power needs the aircraft's **battery capacity (Wh)**, now in the aircraft settings. It's pre-filled from the
+  profile; on dual-battery aircraft use both packs together (e.g. M350: 2 × 263 Wh = 526 Wh).
+- The report, Flight Time Calculator and field brief list each item, the totals, and endurance with and without
+  accessory power. Example: an M350 with a 0.9 kg LiDAR (28 W), a 0.4 kg spotlight (30 W) and a 0.5 kg gas
+  sensor (6 W) drops from 31 to 21.3 usable minutes per battery set (22.6 if the items drew no power).
+- The mapping camera in a stock profile is already part of the aircraft's take-off weight. List it only if you
+  swap it or add a second one.
+
+## DJI Mini Pro series
+
+| Profile | Camera (as planned) | Battery | Best way to fly the mission |
+|---|---|---|---|
+| DJI Mini 3 Pro | 1/1.3" 12 MP, 6.72 mm | 18.1 Wh, 34 min rated | Litchi (DJI SDK supported) – Litchi `.csv` |
+| DJI Mini 4 Pro / (Plus battery) | 1/1.3" 12 MP, 6.72 mm | 18.96 Wh 34 min / 28.4 Wh 45 min | Litchi (SDK since 2025, RC-N2 controller) – Litchi `.csv`; or DJI Fly waypoints via *Replace* |
+| DJI Mini 5 Pro / (Plus battery) | 1" 12.5 MP binned, 9.1 mm | 19.52 Wh 36 min / 33.51 Wh 52 min | DJI Fly waypoints via *Replace* (no third-party SDK at the time of writing) |
+
+All three are under 250 g, so the weight-based endurance model has no payload headroom – keep accessories off.
+Pixel counts are the 12 MP mode (2 s minimum interval); 48/50 MP mode needs ≥5 s between shots, so change
+the camera's *image width/height* and *min interval* if you shoot full resolution.
+
+**Photo trigger** (Flight parameters):
+- *Every N m* – distance trigger (autopilots, Pilot 2, Litchi). Default for most aircraft.
+- *Camera timed shot* – DJI Fly can't fire by distance. The speed is set so the camera's timed interval gives
+  the forward overlap; start *Timed shot* on the camera before starting the route. Default for the Mini 5 Pro.
+- *Stop & shoot* – a waypoint at every photo with a hover (default 1 s) and *take photo*. Sharpest images and
+  works in any app, but slower: the hover, deceleration and re-acceleration are included in flight time and
+  battery splitting, and Litchi files split every 99 waypoints.
+
+**Getting a route into DJI Fly** (Mini 4 Pro / Mini 5 Pro): DJI Fly has no import button, so –
+1. In DJI Fly on the aircraft's controller, create and save any small waypoint route.
+2. Connect the controller (RC 2 / RC-N3 phone) by USB. The route is a `.kmz` in
+   `Android/data/dji.go.v5/files/waypoint/<ID>/<ID>.kmz` (iPhone: *Files ▸ DJI Fly ▸ wayline_mission*).
+3. Export from the planner as **DJI WPML** – when asked, pick that DJI Fly `.kmz` as the template (the
+   aircraft/payload codes are copied from it, so DJI Fly accepts the file). Then *Upload to drone ▸ Replace a
+   mission file made in DJI Fly / Pilot 2* and choose the same file. The original is kept as `.bak`.
+4. Restart DJI Fly, open the route, and **check every waypoint, height and the end action before flying**.
+
+This replace-the-file method is a community workaround, not supported by DJI; behaviour can change with DJI Fly
+updates. Waypoint flight and its limits (e.g. maximum points per route) vary by region and firmware.
+
+## Field-brief basemap
+
+The overview and section maps in the field brief are drawn over a basemap for context (*Export ▸ Brief
+basemap* in QGIS; *Field-brief map background* in ArcGIS):
+
+| Choice | What you get |
+|---|---|
+| **Current map** (default) | QGIS: the layers visible in your map (basemap, imagery, cadastre…), rendered for the exact map extent; if nothing is visible under the mission, OpenStreetMap. ArcGIS Pro: the active map's basemap is matched to the same online service (World Imagery, Topographic, Streets, Light Gray, OpenStreetMap); otherwise OpenStreetMap. |
+| OpenStreetMap / Esri World Imagery / Esri World Topographic | Online tiles downloaded at a resolution that suits the map (max 20 tiles per map), cached for the session. |
+| None | Plain map (smallest file). |
+
+The provider's attribution is printed on every map. Tiles are placed with their exact corner positions in your
+planning CRS, so they line up with the mission even in UTM/MGA. No internet → the brief is still written, with
+a plain map and a warning. Use online basemaps within the providers' terms (OpenStreetMap tile policy: light,
+interactive use; Esri basemaps: per your ArcGIS licence).
+
+## Getting missions onto the drone
+
+| Aircraft / app | Format | How it gets there |
+|---|---|---|
+| **ArduPilot** (Mission Planner, QGC) | `.waypoints`, `.plan` | **Live upload** over USB, telemetry radio, Wi-Fi/UDP or TCP (SITL) |
+| **PX4** (QGroundControl, Auterion) | `.plan` | **Live upload** (same as above) |
+| **DJI Enterprise** – M350/M300, M30, Mavic 3E/3T/3M, M4E/T (Pilot 2) | DJI WPML `.kmz` | Copy to the controller/SD/USB, then *Pilot 2 ▸ Flight Route ▸ Import*; or upload to *FlightHub 2 ▸ Route Library* |
+| **DJI Mini 5 Pro** (no SDK yet) – **DJI Fly** waypoints | DJI WPML `.kmz` | *Upload ▸ Replace a mission file made in DJI Fly* (see below) |
+| **DJI consumer** – Mini 3 Pro, Mini 4 Pro, Air, Mavic, Phantom via **Litchi** | Litchi `.csv` | Import at *flylitchi.com/hub* (syncs to the app). Split automatically at 99 waypoints |
+| **Autel** EVO II / Explorer / Smart Controller | `.kml` | Copy to the controller and import |
+| UgCS, Pix4Dcapture, DroneDeploy, Google Earth, any GIS | `.kml`, `.geojson`, `.csv` | Import |
+
+Files are written **one per flight/battery** by default.
+
+**Honest limits:** DJI and Autel don't let third-party desktop software push missions over their radio link, so
+for those the plugin writes the file straight onto the controller, SD card or USB stick (the *Upload to drone*
+dialog lists removable drives). True over-the-air upload is available for every MAVLink autopilot. Set the DJI
+*enum* (drone,payload — e.g. `77,66` for Mavic 3E) to match your aircraft or Pilot 2 may refuse the route.
+Always check the mission in the flight app before flying, and comply with local rules (CASA in Australia,
+120 m AGL limit unless approved — the planner warns above it).
+
+## What's in the box
+
+```
+drone_mission_planner/          QGIS plugin
+  plugin.py  dock.py  maptools.py  layers.py  profile_widget.py  metadata.txt  icon.png
+  dronemapper_core/             shared engine
+DroneMissionPlanner/            ArcGIS Pro
+  DroneMissionPlanner.pyt       5 tools: Area mission, Route mission, Flight Time Calculator, Upload Mission,
+                                Download DEM
+  dronemapper_core/             shared engine
+dronemapper_core/
+  drones.py          aircraft & camera profiles
+  photogrammetry.py  GSD ⇄ height, footprint, spacing, trigger distance, blur limits
+  geometry.py        scan-line grid, auto heading, corridor offsets, line chaining, chainage, simplification
+  performance.py     endurance model (wind, temperature, altitude, payload, battery)
+  planner.py         mission building, speed optimisation, stations & zones, mid-line/range splitting,
+                     route sections, terrain follow
+  logistics.py       field schedule: battery sets, chargers, charge/swap/drive times
+  dem.py             DEM download (Copernicus GLO-30, AWS Terrain Tiles), PNG decoder, fast sampler
+  terrain.py         terrain clearance / height-limit checks, GSD over terrain, route profile
+  exporters.py       DJI WPML, QGC .plan, Mission Planner, Litchi, KML, GeoJSON, CSV, field brief
+  uploader.py        MAVLink upload (live or from file), copy-to-device, replace a DJI Fly mission
+  basemap.py         online basemap tiles (OSM, Esri) for the field-brief maps
+  briefmap.py        field-brief maps (SVG)
+  obstacles.py       obstacle index & clearance heights
+```
+
+## Testing done
+
+- Core: concave polygons with holes, auto/manual/wind heading, crosshatch, corridors, terrain following,
+  fixed-wing stall-speed floor; all export formats written and XML/JSON validated.
+- MAVLink: planned missions and exported `.plan`/`.waypoints` files uploaded to a simulated autopilot over
+  UDP with MAVLink 1 and 2 — every item received and acknowledged.
+- QGIS 3.34: the real plugin loaded and driven end-to-end — draw, pick, live re-plan on parameter and
+  vertex edits, manual CRS, DXF import, DEM terrain following, route mode, all exports, upload dialog, unload.
+- ArcGIS Pro toolbox: all four tools executed against a functional `arcpy` stand-in (no ArcGIS licence was
+  available here), including CAD input, DEM sampling and validation messages. Please run one test mission in
+  Pro and report anything odd.
+- v1.1 battery & linear features: a 400 ha block (2 stations and an auto-placed 4-station grid with a 1 km VLOS
+  limit) and a 25 km pipeline supplied as shuffled, reversed pieces (chainage window, asymmetric widths,
+  11 auto stations). Checked: survey length flown ≥ planned (no gaps at battery changes), no flight over 100 %
+  battery, no point beyond the range limit, one home position per launch station in the exports, sensible
+  schedules. Driven through the real QGIS panel too, including clicking road pieces on the map and dragging a
+  station to trigger a re-plan.
+- v1.2 DEM: downloads tested against a local server that mimics both services exactly (Cloud-Optimised
+  GeoTIFF range reads, missing ocean tiles, real PNG encodings) – sampled heights within 0.01 m of the true
+  surface; the pure-Python PNG decoder matches Pillow on every PNG filter type. The real servers were not
+  reachable from the build machine, so the first live download is on your machine. Terrain checks verified
+  on synthetic ridges, valleys and hills (flags a flight that would hit the hill at −94 m clearance; with
+  terrain following everything stays at the set height, transits included). Driven through the QGIS panel
+  (Download DEM for both sources, checks layer, profile chart, brief) and the ArcGIS tools.
+- v1.3 heights: feet entry converts exactly to metres in every exported format; separate return and
+  battery-change heights flown as explicit waypoints; battery budgets include the extra climbs; the failsafe
+  RTL altitude was set and confirmed on simulated ArduPilot and PX4 autopilots; unit switching tested in the
+  QGIS panel and the ArcGIS tool.
+- v1.4 payload: endurance verified to use exactly 100 % of the usable battery with accessory load; weight-only
+  results identical to the previous single payload figure; table editing, kg/lb switching, the over-limit
+  warning and the saved list tested in QGIS; the value table and calculator output tested in ArcGIS.
+- v1.5–1.6: brief maps checked visually in Chromium (area with terrain warnings, 11-station pipeline with
+  section maps, aerial background, obstacles); mission names in QGIS and ArcGIS; minimum height and obstacle
+  clearance verified by sampling every metre of every flight.
+- v1.7: Mini 3/4/5 Pro profiles; distance / timed / stop-and-shoot exports checked in DJI WPML (hover +
+  take-photo per point, aircraft codes from a DJI Fly template) and Litchi; replace-file round trip with
+  `.bak`; basemap tiles positioned and checked visually in Chromium, offline fallback, QGIS current-map
+  fallback to OSM, ArcGIS basemap matching. Tile servers were not reachable from the build machine (tiles were
+  simulated), so the first live basemap download is on your machine.
+- Not yet flown on real aircraft: run a short test mission (or ArduPilot SITL) before production work.
+
+## Development
+
+```
+dronemapper_core/          shared planning engine (edit here - the single source of truth)
+qgis/drone_mission_planner/  QGIS plugin (UI)
+arcgis/DroneMissionPlanner/  ArcGIS Pro Python toolbox
+tools/build.py             copies the engine into both plugins and writes dist/*.zip
+tests/                     test scripts, a headless QGIS iface, an arcpy stand-in, sample DEM/CAD data
+docs/examples/             example field briefs
+```
+
+```
+python tools/build.py              # bundle + build dist/drone_mission_planner_qgis.zip and the ArcGIS zip
+python tests/run_tests.py core     # engine + ArcGIS stand-in tests (pyproj; DEM tests also need GDAL, numpy)
+python tests/run_tests.py          # everything, run with QGIS's Python for the QGIS UI tests
+```
+
+The bundled `dronemapper_core` copies inside the plugin folders are generated by `tools/build.py` and are not
+committed. GitHub Actions runs the engine tests on every push and attaches the built zips to the run.

@@ -1,0 +1,26 @@
+name: core tests
+on: [push, pull_request]
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install pyproj
+      - run: python tools/build.py
+      - name: planning engine tests (pure Python + pyproj)
+        working-directory: tests
+        run: |
+          mkdir -p out
+          for t in test_core test_mini test_basemap test_briefmap test_battery_linear test_obstacles test_payload test_terrain; do
+            echo "== $t"; python $t.py > out/$t.log 2>&1 || { tail -30 out/$t.log; exit 1; }
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugins-py${{ matrix.python }}
+          path: dist/*.zip
