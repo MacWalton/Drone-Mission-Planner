@@ -686,7 +686,7 @@ def write_report_pdf(mission, path, to_wgs84, background=None, kp_interval=None)
     r.h2("Launch stations", 50)
     r.table(STATION_HEAD, d["stations"], [2, 5, 2.5], bold_first=True)
     r.h2("Flights & battery plan", 60)
-    r.table(FLIGHT_HEAD, d["flights"], [0.6, 2.0, 0.7, 1.0, 1.0, 0.8, 1.1, 1.1, 1.4, 4.2, 0.9], size=7.5,
+    r.table(FLIGHT_HEAD, d["flights"], [0.6, 1.9, 0.6, 1.0, 1.0, 0.8, 1.1, 1.1, 1.3, 1.6, 3.4, 0.9], size=7.5,
             checkbox=True)
     if d["terrain"]:
         t = d["terrain"]

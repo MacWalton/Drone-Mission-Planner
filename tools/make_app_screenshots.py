@@ -140,6 +140,40 @@ compose(m_img, p_img.copy(0, 0, p_img.width(), 760),
         "Drone Mission Planner - area mission with two launch stations (QGIS)",
         os.path.join(OUT, "qgis_area_mission.png"))
 p_img.save(os.path.join(OUT, "qgis_panel_full.png"))
+# "When & conditions" section with a flight date, plus the light lines of the report
+from qgis.PyQt.QtCore import QDate, QTime
+from qgis.PyQt.QtWidgets import QGroupBox
+d.fdate.setDate(QDate(2026, 10, 15))
+d.tz.setValue(8)
+d.start_t.setTime(QTime(6, 30))
+pump(1500)
+box = [b for b in d.widget().widget().findChildren(QGroupBox) if b.title().startswith("6")][0]
+p_img, root = panel_image()
+top = box.mapTo(root, QPoint(0, 0)).y()
+d.report.setFixedHeight(690)
+p2, root = panel_image()
+ry = d.report.mapTo(root, QPoint(0, 0)).y()
+txt = d.report.toPlainText().splitlines()
+k = next(i for i, l in enumerate(txt) if l.startswith("Flight date & light"))
+d.report.verticalScrollBar().setValue(d.report.verticalScrollBar().maximum())
+pump(300)
+p2, root = panel_image()
+left = p_img.copy(0, top, p_img.width(), 300)
+right = p2.copy(0, ry, p2.width(), 690)
+W_ = left.width() + right.width() + 1
+img = QImage(W_, 34 + max(left.height(), right.height()), QImage.Format.Format_RGB32)
+img.fill(QColor(255, 255, 255))
+pp = QPainter(img)
+pp.fillRect(0, 0, W_, 34, QColor(46, 52, 64))
+ff = QFont(); ff.setPointSize(11); ff.setBold(True); pp.setFont(ff); pp.setPen(QColor(255, 255, 255))
+pp.drawText(QRect(12, 0, W_, 34), int(Qt.AlignmentFlag.AlignVCenter),
+            "Flight date, time zone and arrival time (left) - daylight, sun height per flight and warnings (right)")
+pp.drawImage(0, 34, left); pp.drawImage(left.width() + 1, 34, right)
+pp.end()
+img.save(os.path.join(OUT, "qgis_flight_date.png"))
+print("wrote docs/screenshots/qgis_flight_date.png")
+d.report.setMinimumHeight(0); d.report.setMaximumHeight(16777215)
+d.start_t.setTime(QTime(8, 0))
 d.report.setFixedHeight(690)                      # show the whole text report
 p2, root = panel_image()
 y = d.report.mapTo(root, QPoint(0, 0)).y()

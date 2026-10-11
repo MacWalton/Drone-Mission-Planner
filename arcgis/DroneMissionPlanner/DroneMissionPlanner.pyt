@@ -242,7 +242,10 @@ def _logistics_from_params(p):
         battery_sets=int(_val(p, "sets", 4)), chargers=int(_val(p, "chargers", 2)),
         charge_min=float(_val(p, "charge_min", 60)), swap_min=float(_val(p, "swap_min", 4)),
         setup_min=float(_val(p, "setup_min", 15)), drive_kmh=float(_val(p, "drive_kmh", 30)),
-        relocate_overhead_min=float(_val(p, "reloc_min", 8)), start_time_min=start)
+        relocate_overhead_min=float(_val(p, "reloc_min", 8)), start_time_min=start,
+        flight_date=_flight_date_text(p),
+        utc_offset_h=float(_val(p, "utc_offset")) if _val(p, "utc_offset") is not None else None,
+        min_sun_deg=float(_val(p, "min_sun", 30)))
 
 
 def _to_wgs84_fn(work_sr):
@@ -592,9 +595,29 @@ def _dji_template_param(cat):
     return t
 
 
+def _flight_date_text(p):
+    """'YYYY-MM-DD' from the Flight date parameter ('' if not set)."""
+    if "flight_date" not in p or p["flight_date"].value is None:
+        return ""
+    v = p["flight_date"].value
+    try:
+        return v.strftime("%Y-%m-%d")
+    except AttributeError:
+        d = core.daylight.parse_date(str(v))
+        return d.isoformat() if d else ""
+
+
 def _conditions_params():
     cat = "Conditions (flight-time optimisation)"
+    import datetime as _dt
     return [
+        _param("flight_date", "Flight date (sunrise/sunset, sun height per flight, best light)", "GPDate",
+               "Optional", value=_dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0),
+               category=cat),
+        _param("utc_offset", "Site time zone - hours from UTC (blank = this computer's zone)", "GPDouble",
+               "Optional", category=cat),
+        _param("min_sun", "Minimum sun height for good mapping light (deg)", "GPDouble", value=30.0,
+               category=cat),
         _param("wind_unit", "Wind speed unit", "GPString", values=list(WIND_UNITS), value="Knots",
                category=cat),
         _param("wind", "Wind speed (wind speed unit)", "GPDouble", value=0.0, category=cat),
@@ -926,7 +949,8 @@ class _MissionTool(object):
             height_unit=_hunit(p), mass_unit=(p["payload_unit"].valueAsText or "kg"),
             mission_name=(p["mission_name"].valueAsText or "").strip() or core.default_mission_name(
                 core.ROUTE if self.route else core.AREA,
-                "" if fs.startswith("in_memory") or "FeatureSet" in fs else os.path.splitext(os.path.basename(fs))[0]),
+                "" if fs.startswith("in_memory") or "FeatureSet" in fs else os.path.splitext(os.path.basename(fs))[0],
+                core.daylight.parse_date(_flight_date_text(p)).strftime("%d %b %Y") if _flight_date_text(p) else None),
             front_overlap_pct=float(_val(p, "front", 75)), side_overlap_pct=float(_val(p, "side", 65)),
             overshoot_m=float(_val(p, "overshoot", 10)),
             speed_ms=float(_val(p, "speed")) if _val(p, "speed") else None,
@@ -1000,6 +1024,7 @@ class _MissionTool(object):
         if (dem is not None or mission.obstacles) and _val(p, "tcheck", True):
             limit = (_hm(p, "min_agl") - 0.5) if _hm(p, "min_agl") else _hm(p, "tclear", 30)
             core.terrain.analyse(mission, dem, limit, _hm(p, "tagl", 120))
+        core.daylight.analyse(mission, _to_wgs84_fn(work_sr), float(_val(p, "min_sun", 30)))
         for line in mission.report().splitlines():
             (_warn if line.startswith("WARNING") else _msg)(line)
 

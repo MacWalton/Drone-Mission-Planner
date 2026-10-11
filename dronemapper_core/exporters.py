@@ -575,11 +575,13 @@ def brief_content(mission, to_wgs84, path=None):
     for f in m.flights:
         r = srow.get(f.index + 1)
         kp = ("%.2f\u2013%.2f" % (f.chainage[0] / 1000, f.chainage[1] / 1000)) if f.chainage else ""
+        dl = {x.flight: x for x in (getattr(m, "daylight", None).flights if getattr(m, "daylight", None) else [])}
         flights.append(["%d" % (f.index + 1), "%s \u2192 %s" % (m.label(f.station_start), m.label(f.station_end)),
                         "%s" % (r.battery_set if r else ""),
                         clock(lp.start_time_min + r.start_min) if r else "",
                         clock(lp.start_time_min + r.end_min) if r else "", "%.1f" % (f.duration_s / 60),
                         "%.0f%%" % (f.battery_fraction * 100), "%d" % f.photos, kp,
+                        dl[f.index + 1].sun_text if (f.index + 1) in dl else "-",
                         (("battery change mid-line. " if f.ends_midline else "") + (r.note if r else "")).strip()])
     h, mm = divmod(int(m.total_time_s // 60), 60)
     summary = [("Aircraft", m.drone.name), ("Mission", m.params.mission_type),
@@ -599,6 +601,15 @@ def brief_content(mission, to_wgs84, path=None):
     if m.centreline:
         summary.insert(3, ("Route", "%.2f km, %d sections" % (sum(
             dist_m(a, b) for a, b in zip(m.centreline[:-1], m.centreline[1:])) / 1000, len(m.sections))))
+    dlr = getattr(m, "daylight", None)
+    if dlr is not None:
+        summary[0:0] = [("Flight date", dlr.date_text)]
+        summary += [("Daylight", "%s \u2013 %s" % (_dclock(dlr.sunrise), _dclock(dlr.sunset)) if dlr.sunrise is not None
+                     else dlr.daylight_text),
+                    ("Civil twilight", "%s \u2013 %s" % (_dclock(dlr.dawn), _dclock(dlr.dusk))),
+                    ("Best light (sun \u2265 %.0f\u00b0)" % dlr.min_sun_deg,
+                     ("%s \u2013 %s" % (_dclock(dlr.best[0]), _dclock(dlr.best[1]))) if dlr.best
+                     else "never (max %.0f\u00b0)" % dlr.max_elev)]
     if sc:
         summary += [("On site", "%s \u2013 %s (%.1f h)" % (clock(lp.start_time_min),
                                                          clock(lp.start_time_min + sc.total_min), sc.total_min / 60)),
@@ -623,14 +634,23 @@ def brief_content(mission, to_wgs84, path=None):
                  "%d" % i.flight, ("%.3f" % (i.kp / 1000)) if i.kp is not None else "", "%.0f m" % i.value_m,
                  "%.0f" % i.ground_m, "%.0f" % i.alt_amsl] for i in rep.issues[:40]]
         terrain = {"text": rep.text(hu), "rows": rows}
-    return {"title": mission_title(m, path), "sub": "%s, %s" % (m.drone.name, time.strftime("%d %b %Y")),
+    sub = ("%s \u00b7 flight date %s \u00b7 prepared %s" % (m.drone.name, dlr.date.strftime("%a %d %b %Y"),
+                                                           time.strftime("%d %b %Y")) if dlr is not None
+           else "%s, %s" % (m.drone.name, time.strftime("%d %b %Y")))
+    return {"title": mission_title(m, path), "sub": sub,
             "summary": summary, "stations": stations, "flights": flights, "payload": payload,
             "terrain": terrain, "warnings": list(m.warnings),
             "check": "Check airspace, NOTAMs, weather and the mission preview in the flight app before each flight."}
 
 
 STATION_HEAD = ["Station", "Lat, Lon (WGS84)", "Flights launched"]
-FLIGHT_HEAD = ["#", "Launch \u2192 land", "Set", "Start", "End", "Min", "Battery", "Photos", "KP (km)", "Notes", "Done"]
+FLIGHT_HEAD = ["#", "Launch \u2192 land", "Set", "Start", "End", "Min", "Battery", "Photos", "KP (km)", "Sun",
+               "Notes", "Done"]
+
+
+def _dclock(v):
+    from .daylight import clock
+    return clock(v)
 TERRAIN_HEAD = ["Issue", "Flight", "KP (km)", "Clearance / AGL", "Ground m AMSL", "Aircraft m AMSL"]
 
 

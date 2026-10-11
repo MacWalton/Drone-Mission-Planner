@@ -24,6 +24,9 @@ class LogisticsParams:
     relocate_overhead_min: float = 8.0   # pack, move, set up again at a new station
     start_time_min: float = 8 * 60   # clock time of arrival on site (minutes after midnight)
     cooldown_min: float = 5.0        # let a hot pack cool before charging
+    flight_date: str = ""            # 'YYYY-MM-DD' - enables daylight / sun checks (daylight.analyse)
+    utc_offset_h: float = None       # site time zone; None = this computer's zone on that date
+    min_sun_deg: float = 30.0        # sun height below which mapping light is flagged as poor
 
 
 @dataclass

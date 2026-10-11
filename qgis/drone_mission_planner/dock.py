@@ -358,8 +358,31 @@ class MissionDock(QDockWidget):
         lay.addWidget(g)
 
         # ---- 6. Conditions
-        g = QGroupBox("6  Conditions (flight-time optimisation)")
+        g = QGroupBox("6  When and conditions (flight date, light, flight-time optimisation)")
         f = QFormLayout(g)
+        from qgis.PyQt.QtWidgets import QDateEdit
+        from qgis.PyQt.QtCore import QDate
+        self.fdate = QDateEdit(QDate.currentDate())
+        self.fdate.setCalendarPopup(True)
+        self.fdate.setDisplayFormat("ddd dd MMM yyyy")
+        self.fdate.setToolTip("Day the mission will be flown: sunrise/sunset, sun height per flight and the "
+                              "best-light window are worked out for this date at the site.")
+        self.tz = dspin(-14.25, 14, 8, 2, "", 0.25)
+        self.tz.setSpecialValueText("This computer's time zone")
+        self.tz.setPrefix("UTC ")
+        self.tz.setValue(-14.25)
+        self.tz.setToolTip("Site time zone as hours from UTC (e.g. 8 for Perth, 10 or 11 for Sydney). "
+                           "Leave at 'This computer's time zone' when planning where you fly.")
+        from qgis.PyQt.QtWidgets import QTimeEdit
+        from qgis.PyQt.QtCore import QTime
+        self.start_t = QTimeEdit(QTime(8, 0)); self.start_t.setDisplayFormat("HH:mm")
+        self.start_t.setToolTip("Arrival on site - the field schedule gives clock times for every flight from here.")
+        f.addRow("Flight date", self.fdate)
+        f.addRow("Time zone", self.tz)
+        f.addRow("Arrive on site", self.start_t)
+        self.min_sun = dspin(5, 70, 30, 0, "° min sun height", 5)
+        self.min_sun.setToolTip("Flights with the sun lower than this are flagged: long shadows reduce "
+                                "photogrammetry quality. 30° is a common rule of thumb.")
         self.wind = dspin(0, 80, 0, 0, "kn", 1)
         self.wdir = dspin(0, 359, 0, 0, "° from", 10)
         self.wind_unit_cb = QComboBox()
@@ -376,6 +399,7 @@ class MissionDock(QDockWidget):
         self.elev_btn.clicked.connect(self.elev_from_dem)
         row = QHBoxLayout(); row.addWidget(self.elev); row.addWidget(self.elev_btn)
         f.addRow("Take-off elevation", row)
+        f.addRow("Mapping light", self.min_sun)
         from .payload_widget import PayloadTable
         self.payload_tbl = PayloadTable()
         self.payload_tbl.changed.connect(self._param_changed)
@@ -467,9 +491,6 @@ class MissionDock(QDockWidget):
         self.setup_min = dspin(0, 180, 15, 0, "min", 5)
         self.drive_kmh = dspin(1, 120, 30, 0, "km/h", 5)
         self.reloc_min = dspin(0, 120, 8, 0, "min")
-        from qgis.PyQt.QtWidgets import QTimeEdit
-        from qgis.PyQt.QtCore import QTime
-        self.start_t = QTimeEdit(QTime(8, 0)); self.start_t.setDisplayFormat("HH:mm")
         f.addRow("Charged battery sets", self.sets)
         f.addRow("Chargers (sets at once)", self.chargers)
         f.addRow("Charge time per set", self.charge_min)
@@ -477,7 +498,6 @@ class MissionDock(QDockWidget):
         f.addRow("Site setup", self.setup_min)
         f.addRow("Drive between stations", self.drive_kmh)
         f.addRow("Pack / set-up per move", self.reloc_min)
-        f.addRow("Arrive on site", self.start_t)
         g.setCollapsed(True)
         lay.addWidget(g)
 
@@ -579,6 +599,10 @@ class MissionDock(QDockWidget):
                   self.midline, self.leapfrog, self.rev_kp):
             w.toggled.connect(self._param_changed)
         self.start_t.timeChanged.connect(self._param_changed)
+        self.fdate.dateChanged.connect(self._param_changed)
+        self.fdate.dateChanged.connect(lambda *_: self._refresh_name_hint())
+        self.tz.valueChanged.connect(self._param_changed)
+        self.min_sun.valueChanged.connect(self._param_changed)
         for w in (self.head_mode, self.shutter, self.sec_mode):
             w.currentIndexChanged.connect(self._param_changed)
         self.sw.valueChanged.connect(self._sync_from_height)
@@ -655,7 +679,8 @@ class MissionDock(QDockWidget):
         typed = self.name_le.text().strip()
         if typed:
             return typed
-        return core.default_mission_name(core.ROUTE if self.is_route else core.AREA, self._source_name)
+        return core.default_mission_name(core.ROUTE if self.is_route else core.AREA, self._source_name,
+                                         self.fdate.date().toString("dd MMM yyyy"))
 
     def _name_changed(self, *_):
         self._refresh_name_hint()
@@ -665,7 +690,8 @@ class MissionDock(QDockWidget):
 
     def _refresh_name_hint(self):
         self.name_le.setPlaceholderText(core.default_mission_name(
-            core.ROUTE if self.is_route else core.AREA, self._source_name))
+            core.ROUTE if self.is_route else core.AREA, self._source_name,
+            self.fdate.date().toString("dd MMM yyyy") if hasattr(self, "fdate") else None))
 
     # ============================================================ units
     def _m(self, spin):
@@ -1336,7 +1362,10 @@ class MissionDock(QDockWidget):
             charge_min=self.charge_min.value(), swap_min=self.swap_min.value(),
             setup_min=self.setup_min.value(), drive_kmh=self.drive_kmh.value(),
             relocate_overhead_min=self.reloc_min.value(),
-            start_time_min=t.hour() * 60 + t.minute())
+            start_time_min=t.hour() * 60 + t.minute(),
+            flight_date=self.fdate.date().toString("yyyy-MM-dd"),
+            utc_offset_h=None if self.tz.value() <= self.tz.minimum() + 1e-9 else self.tz.value(),
+            min_sun_deg=self.min_sun.value())
 
     def plan(self, quiet=False):
         blyr = L.find(L.CENTRELINE if self.is_route else L.BOUNDARY)
@@ -1385,6 +1414,7 @@ class MissionDock(QDockWidget):
                 if self._m(self.min_agl):                   # the minimum height is the clearance target
                     limit = self._m(self.min_agl) - 0.5
                 core.terrain.analyse(m, dem, limit, self._m(self.tagl))
+            core.daylight.analyse(m, self._to84_for(work), self.min_sun.value())
             self.payload_tbl.set_limit(m.drone.max_payload_kg)
             self.mission, self.work_crs = m, work
             self._draw_result(m, work)
@@ -1485,6 +1515,14 @@ class MissionDock(QDockWidget):
             site.dataProvider().changeAttributeValues(changes)
             site.triggerRepaint()
         self.canvas.refresh()
+
+    def _to84_for(self, crs):
+        xf = L.transform(crs, WGS84)
+
+        def f(x, y):
+            p = xf.transform(QgsPointXY(x, y))
+            return p.x(), p.y()
+        return f
 
     def to_wgs84(self):
         xf = L.transform(self.work_crs, WGS84)

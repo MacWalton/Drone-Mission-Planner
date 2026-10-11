@@ -82,6 +82,15 @@ print("  PDF report:", seen["default"], "| %d KB" % (len(pd) // 1024), "| valid:
 assert seen["default"].endswith(".pdf") and pd.count(b"/Subtype /Image") >= 1
 d.wind.setValue(15); d.wind_unit_cb.setCurrentIndex(d.wind_unit_cb.findData("m/s")); w_ms = d.wind.value(); d.wind_unit_cb.setCurrentIndex(d.wind_unit_cb.findData("kn"))
 print("  wind unit switch kn -> m/s -> kn:", w_ms, "->", d.wind.value(), "| report:", [l for l in d.report.toPlainText().splitlines() if l.startswith("Wind")])
+# flight date, time zone, early arrival -> daylight section and warnings
+from qgis.PyQt.QtCore import QDate, QTime
+d.fdate.setDate(QDate(2026, 12, 21)); d.tz.setValue(8); d.start_t.setTime(QTime(4, 0)); pump(1500)
+rt = d.report.toPlainText()
+print("  daylight in report:", "Flight date & light" in rt, "| warnings:", [w[:60] for w in d.mission.warnings if w.startswith(("DAYLIGHT", "LIGHT"))][:2])
+print("  name hint with flight date:", d.name_le.placeholderText() or d.mission_name())
+assert "Flight date & light" in rt and any(w.startswith("DAYLIGHT") for w in d.mission.warnings)
+d.tz.setValue(d.tz.minimum()); pump(800); print("  computer zone ->", d.tz.text(), "|", [l for l in d.report.toPlainText().splitlines() if "Date" in l][:1])
+d.start_t.setTime(QTime(8, 0)); pump(800)
 d.fmt_cb.setCurrentIndex(d.fmt_cb.findData("dji_kmz")); d.export(); print("  kmz default:", seen["default"], "->", sorted(x for x in os.listdir(out) if x.endswith(".kmz"))[:2])
 pl.unload()
 

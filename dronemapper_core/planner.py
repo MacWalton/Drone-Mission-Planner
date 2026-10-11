@@ -133,6 +133,7 @@ class Mission:
     obstacles: object = None          # obstacles.ObstacleSet
     min_agl_m: float = None
     ground: object = None             # f(x, y) -> m AMSL used for planning (DEM), if any
+    daylight: object = None           # daylight.DaylightReport (set by daylight.analyse)
 
     @property
     def waypoints(self):
@@ -239,6 +240,9 @@ class Mission:
         if self.schedule is not None and len(self.flights) > 1:
             lines.append("")
             lines.append(self.schedule.table())
+        if self.daylight is not None:
+            lines.append("")
+            lines.append(self.daylight.text())
         for w in self.warnings:
             lines.append("WARNING: " + w)
         return "\n".join(lines)

@@ -43,3 +43,12 @@ src = os.path.join(out, k[0])
 run(T.UploadMission(), in_file=src, method=[v for v in T._by_name(T.UploadMission().getParameterInfo())["method"].filter.list if v.startswith("Replace")][0], replace_file=target)
 for l, m in arcpy.MSGS: print(" ", l, m)
 print("  files on controller:", sorted(os.listdir(ctrl)), "| replaced has hover:", ">hover<" in zipfile.ZipFile(target).read("wpmz/template.kml").decode())
+
+print("== flight date & daylight (ArcGIS)")
+import datetime as _dt
+d = run2(T.AreaMission(), {"aircraft": "DJI Matrice 4E"}, in_features="boundary", takeoff="tk", out_gdb=gdb, gsd=2.0,
+         flight_date=_dt.datetime(2026, 6, 21), utc_offset=8.0, start_time="05:30", export_folder=out,
+         formats=[T.exporters.FORMATS["brief_pdf"][0]], mission_name="Winter dawn")
+msgs = [m for l, m in arcpy.MSGS]
+print(" ", [m for m in msgs if "Date" in m or "Best light" in m or "DAYLIGHT" in m or "Daylight" in m][:4])
+assert any("Flight date & light" in m for m in msgs) and any("DAYLIGHT" in m for m in msgs)

@@ -1,4 +1,4 @@
-# Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox  (v1.9)
+# Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox  (v1.10)
 
 Plan drone mapping missions from a drawn polygon/line or an imported GIS/CAD file, tune them for wind,
 temperature, altitude and payload, plan the battery changes for big jobs and long linear features, and send
@@ -81,7 +81,7 @@ by `tools/make_report_screenshots.py` (needs pyproj and Playwright).
    front/side overlap, line heading (auto fewest lines / manual / align with wind), crosshatch for 3D,
    coverage margin, run-in/out, speed (auto-optimised or fixed), gimbal pitch, shutter, portrait camera,
    **photo trigger** (every N m / camera timed shot / stop & shoot — see *DJI Mini Pro series*).
-7. **Conditions & terrain** – wind speed (**knots** by default; m/s or km/h selectable – the aircraft's max
+7. **When & conditions** – **flight date, site time zone and arrival time** (see *Flight date & light*), wind speed (**knots** by default; m/s or km/h selectable – the aircraft's max
    wind uses the same unit) & direction, temperature, take-off elevation (or *From DEM*), the
    **payload list** (see below),
    battery reserve & health. **DEM**: pick one you have, or click *Download DEM* (see below) – used for terrain
@@ -93,6 +93,28 @@ by `tools/make_report_screenshots.py` (needs pyproj and Playwright).
    gives GSD, spacing, photo count, time and battery use per flight, plus the field schedule.
 10. **Export / upload** (see below), including a printable **field brief** with mission maps drawn over a
     **basemap** (see *Field-brief basemap*).
+
+## Flight date & light
+
+Set the **flight date** (QGIS: *When and conditions*; ArcGIS: *Flight date* under Conditions), the site **time
+zone** (default: this computer's zone on that date – DST aware – or hours from UTC, e.g. 8 for Perth) and the
+**arrival time**. For the site and that date the planner works out, with a built-in solar calculator (NOAA
+method, about a minute of accuracy, no internet needed):
+
+- **Civil dawn, sunrise, solar noon, sunset, civil dusk** and the sun's maximum height.
+- The **sun height at the start and end of every flight** in the field schedule – in the report, the HTML brief
+  and a new *Sun* column of the PDF.
+- **Warnings** for flights outside civil twilight (*night* – needs an approval in most jurisdictions, e.g.
+  CASA, FAA) and in twilight (before sunrise / after sunset – lighting rules, dark images).
+- **Mapping light**: flights with the sun below the minimum height (default 30°, adjustable) are flagged –
+  long shadows hurt stitching and 3D – and the **best-light window** (sun above that height) is given.
+- A time-zone sanity check (warns if the zone doesn't fit the site's longitude).
+- The report and brief show the flight date ("flight date Thu 15 Oct 2026 · prepared 12 Oct 2026"), and the
+  automatic mission name uses it.
+
+Weather forecasts and NOTAMs still need checking online before you fly.
+
+![Flight date and light in QGIS](docs/screenshots/qgis_flight_date.png)
 
 ## Image footprints
 
@@ -410,6 +432,7 @@ dronemapper_core/
   dem.py             DEM download (Copernicus GLO-30, AWS Terrain Tiles), PNG decoder, fast sampler
   terrain.py         terrain clearance / height-limit checks, GSD over terrain, route profile
   exporters.py       DJI WPML, QGC .plan, Mission Planner, Litchi, KML, GeoJSON, CSV, field brief (HTML)
+  daylight.py        flight date: sun position, sunrise/sunset, twilight, sun height per flight
   footprints.py      photo positions along the flights and image footprints (terrain-aware)
   pdfreport.py       mission report as PDF (pure-Python PDF writer, SVG maps drawn as vector)
   uploader.py        MAVLink upload (live or from file), copy-to-device, replace a DJI Fly mission
@@ -464,6 +487,9 @@ dronemapper_core/
   exactly to m/s for planning and back when the unit is switched.
 - v1.9: image footprints – photo count matches the plan, front overlap measured from consecutive footprints
   equals the setting, footprints shrink with height above ground on a slope (DEM).
+- v1.10: sun position checked against the astral library (elevation identical to 0.01°, sunrise/sunset/
+  twilight within 1 min for Perth, London, Denver and Tromsø); night, twilight and low-sun flights flagged;
+  date, time zone and arrival driven in the QGIS panel and the ArcGIS tool.
 - Not yet flown on real aircraft: run a short test mission (or ArduPilot SITL) before production work.
 
 ## Development
@@ -476,7 +502,7 @@ tools/build.py             copies the engine into both plugins and writes dist/*
 tests/                     test scripts, a headless QGIS iface, an arcpy stand-in, sample DEM/CAD data
 docs/examples/             example mission reports (PDF) and field briefs (HTML)
 docs/screenshots/          README images (tools/make_*_screenshots.py)
-docs/releases/             release notes (v1.7.0 – v1.9.0)
+docs/releases/             release notes (v1.7.0 – v1.10.0)
 ```
 
 ```

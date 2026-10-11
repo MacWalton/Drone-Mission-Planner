@@ -42,8 +42,11 @@ def area_brief():
     sts = suggest_area_stations(blk, mp.max_range_m)
     m = plan_mission(mp, d, cond, blk, sts[0], stations=sts[1:],
                      ground_elevation=ground, obstacles=obs,
-                     logistics=LogisticsParams(battery_sets=4, chargers=2, start_time_min=7 * 60 + 30))
+                     logistics=LogisticsParams(battery_sets=4, chargers=2, start_time_min=7 * 60 + 30,
+                                               flight_date="2026-10-15", utc_offset_h=8))
     TR.analyse(m, ground, 44.5, 120)
+    from dronemapper_core import daylight
+    daylight.analyse(m, to84)
     return m
 
 
@@ -58,8 +61,11 @@ def route_brief():
     cond = Conditions(wind_speed_ms=5, wind_from_deg=250, temperature_c=24)
     sts = suggest_stations(mp, d, cond, road)
     m = plan_mission(mp, d, cond, road, sts[0], stations=sts[1:], ground_elevation=hill,
-                     logistics=LogisticsParams(battery_sets=6, chargers=3, start_time_min=7 * 60))
+                     logistics=LogisticsParams(battery_sets=6, chargers=3, start_time_min=7 * 60,
+                                               flight_date="2026-10-16", utc_offset_h=8))
     TR.analyse(m, hill, 30, 120)
+    from dronemapper_core import daylight
+    daylight.analyse(m, to84)
     return m
 
 
