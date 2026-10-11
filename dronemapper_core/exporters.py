@@ -272,8 +272,9 @@ def read_dji_template(path):
 
 def _wpml_header(mission, finish_action, enums=None):
     d = mission.drone
-    enum = (d.drone_enum or "77,66").split(",")
-    sub = "0"
+    enum = [e.strip() for e in (d.drone_enum or "0,0").split(",")]   # "drone,payload[,sub]"
+    sub = enum[2] if len(enum) > 2 and enum[2] else "0"
+    enum = enum[:2]
     if enums:
         enum = [enums["drone"], enums["payload"] if enums.get("payload") is not None else ""]
         sub = enums.get("sub") or "0"
@@ -298,7 +299,7 @@ def _wpml_header(mission, finish_action, enums=None):
       </wpml:payloadInfo>
     </wpml:missionConfig>""".format(now=now, fa=finish_action, tsh=min(max(mission.height_m, 20), 1500),
                                     gts=min(mission.drone.max_speed_ms, 15.0),
-                                    de=enum[0].strip(), pe=(enum[-1].strip() or 0) if len(enum) > 1 else 0,
+                                    de=enum[0].strip(), pe=(enum[1].strip() or 0) if len(enum) > 1 else 0,
                                     sub=sub)
 
 

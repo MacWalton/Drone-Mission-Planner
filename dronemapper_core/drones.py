@@ -37,18 +37,39 @@ class Drone:
     rotor_disk_area_m2: float = 0.12   # total disk area (used for density scaling)
     fixed_wing: bool = False
     max_waypoints: int = 65535
-    drone_enum: str = ""       # DJI WPML droneEnumValue / payloadEnumValue "a,b"
+    drone_enum: str = ""       # DJI WPML "droneEnumValue,payloadEnumValue[,droneSubEnumValue]"
     photo_trigger: str = "distance"   # default photo trigger: distance | timed | stop
     notes: str = ""
 
     def to_dict(self):
         return asdict(self)
 
+    @property
+    def needs_dji_template(self):
+        """True for DJI aircraft whose WPML aircraft/payload code isn't known (export with a template)."""
+        if self.platform == "dji_fly":
+            return True
+        if self.platform != "dji_wpml":
+            return False
+        parts = [p.strip() for p in (self.drone_enum or "").split(",")]
+        return len(parts) < 2 or not parts[0] or not parts[1]
+
 
 CAMERAS = {
     "DJI Mavic 3E (4/3 CMOS)": Camera("Mavic 3E", 17.3, 13.0, 12.29, 5280, 3956, 0.7),
     "DJI Phantom 4 RTK": Camera("P4RTK FC6310R", 13.2, 8.8, 8.8, 5472, 3648, 2.0),
     "DJI Zenmuse P1 35mm": Camera("Zenmuse P1 35mm", 35.9, 24.0, 35.0, 8192, 5460, 0.7),
+    # ---- DJI Enterprise cameras (DJI spec pages). DJI lists 35 mm-equivalent focal lengths for the
+    # built-in cameras; actual focal lengths below are derived from sensor size (24 mm eq. on 4/3 = 12.29 mm).
+    "DJI Zenmuse P1 24mm": Camera("Zenmuse P1 24mm", 35.9, 24.0, 24.0, 8192, 5460, 0.7),
+    "DJI Zenmuse P1 50mm": Camera("Zenmuse P1 50mm", 35.9, 24.0, 50.0, 8192, 5460, 0.7),
+    "DJI Zenmuse L1 (RGB)": Camera("Zenmuse L1 1in 20MP", 13.2, 8.8, 8.8, 5472, 3648, 1.0),
+    "DJI Zenmuse L2 (RGB)": Camera("Zenmuse L2 4/3 20MP", 17.3, 13.0, 12.29, 5280, 3956, 0.7),
+    "DJI Zenmuse L3 (RGB 100 MP)": Camera("Zenmuse L3 4/3 100MP", 17.3, 11.53, 13.45, 12288, 8192, 1.0),
+    "DJI Mavic 3T wide (12 MP)": Camera("Mavic 3T wide 1/2in", 6.4, 4.8, 4.44, 4000, 3000, 2.0),
+    "DJI Matrice 30 wide": Camera("M30 wide 1/2in 12MP", 6.4, 4.8, 4.5, 4000, 3000, 2.0),
+    "DJI 4/3 20 MP wide (M4E/M4D/M3D)": Camera("4/3 CMOS 20MP wide", 17.3, 13.0, 12.29, 5280, 3956, 0.7),
+    "DJI 1/1.3in 48 MP wide (M4T/M4TD/M3TD)": Camera("1/1.3in 48MP wide", 9.6, 7.2, 6.72, 8064, 6048, 0.7),
     # DJI Mini series: 12 MP mode (2 s fastest timed interval). For full resolution set the image
     # size to the 48/50 MP figure and the minimum photo interval to 5 s (DJI spec: timed 48/50 MP >= 5 s).
     "DJI Mini 3 Pro (12 MP)": Camera("Mini 3 Pro 1/1.3in", 9.6, 7.2, 6.72, 4032, 3024, 2.0),
@@ -61,12 +82,92 @@ CAMERAS = {
 }
 
 DRONES = {
+    # ---- DJI Enterprise (specs: enterprise.dji.com spec pages). drone_enum = WPML
+    # "droneEnumValue,payloadEnumValue,droneSubEnumValue" from the DJI Cloud API docs. Where DJI has not
+    # published a code, it is left blank: export with a route made on the aircraft as the DJI template.
+    # Combos with a gimbal camera: mass includes the camera and the flight time is DJI's no-payload time
+    # scaled for the extra mass (estimate) - check against your own flights.
+    "DJI Matrice 4E": Drone(
+        "DJI Matrice 4E", "dji_wpml", CAMERAS["DJI 4/3 20 MP wide (M4E/M4D/M3D)"],
+        1.219, 0.2, 49, 15, 12, 99.5, 0.12, drone_enum="99,88,0",
+        notes="Mechanical shutter, 0.5 s interval. Pilot 2 route import (KMZ)."),
+    "DJI Matrice 4T": Drone(
+        "DJI Matrice 4T", "dji_wpml", CAMERAS["DJI 1/1.3in 48 MP wide (M4T/M4TD/M3TD)"],
+        1.219, 0.2, 49, 15, 12, 99.5, 0.12, drone_enum="99,89,1",
+        notes="Wide camera 48 MP, electronic shutter - keep speed modest to limit rolling-shutter blur."),
+    "DJI Matrice 4D (Dock 3)": Drone(
+        "DJI Matrice 4D (Dock 3)", "dji_wpml", CAMERAS["DJI 4/3 20 MP wide (M4E/M4D/M3D)"],
+        2.09, 0.0, 54, 15, 12, 149.9, 0.15, drone_enum="100,98,0",
+        notes="Dock aircraft: import the KMZ into FlightHub 2 > Flight Route Library."),
+    "DJI Matrice 4TD (Dock 3)": Drone(
+        "DJI Matrice 4TD (Dock 3)", "dji_wpml", CAMERAS["DJI 1/1.3in 48 MP wide (M4T/M4TD/M3TD)"],
+        2.09, 0.0, 54, 15, 12, 149.9, 0.15, drone_enum="100,99,1",
+        notes="Dock aircraft: import the KMZ into FlightHub 2 > Flight Route Library."),
+    "DJI Matrice 3D (Dock 2)": Drone(
+        "DJI Matrice 3D (Dock 2)", "dji_wpml", CAMERAS["DJI 4/3 20 MP wide (M4E/M4D/M3D)"],
+        1.61, 0.0, 50, 15, 12, 115.2, 0.13, drone_enum="91,80,0",
+        notes="Dock aircraft: import the KMZ into FlightHub 2 > Flight Route Library."),
+    "DJI Matrice 3TD (Dock 2)": Drone(
+        "DJI Matrice 3TD (Dock 2)", "dji_wpml", CAMERAS["DJI 1/1.3in 48 MP wide (M4T/M4TD/M3TD)"],
+        1.61, 0.0, 50, 15, 12, 115.2, 0.13, drone_enum="91,81,1",
+        notes="Dock aircraft: import the KMZ into FlightHub 2. 48 MP photos need >= 1 s between shots."),
     "DJI Mavic 3 Enterprise": Drone(
         "DJI Mavic 3 Enterprise", "dji_wpml", CAMERAS["DJI Mavic 3E (4/3 CMOS)"],
-        0.915, 0.2, 42, 15, 12, 77, 0.10, drone_enum="77,66"),
+        0.915, 0.135, 45, 15, 12, 77, 0.10, drone_enum="77,66,0",
+        notes="EU C1 battery: 65 Wh, 36 min - edit battery and flight time if you fly that pack."),
+    "DJI Mavic 3 Thermal (3T)": Drone(
+        "DJI Mavic 3 Thermal (3T)", "dji_wpml", CAMERAS["DJI Mavic 3T wide (12 MP)"],
+        0.92, 0.13, 45, 15, 12, 77, 0.10, drone_enum="77,67,1",
+        notes="Wide camera planned in 12 MP mode (2 s interval); 48 MP does not support 2 s timed shots."),
+    "DJI Mavic 3 Multispectral (3M)": Drone(
+        "DJI Mavic 3 Multispectral (3M)", "dji_wpml", CAMERAS["DJI Mavic 3E (4/3 CMOS)"],
+        0.951, 0.0, 43, 15, 12, 77, 0.10, drone_enum="77,68,2",
+        notes="Planned on the 20 MP RGB camera. Multispectral bands (5 MP, 25 mm eq.) have a coarser GSD - "
+              "check overlap for the band cameras."),
+    "DJI Matrice 30": Drone(
+        "DJI Matrice 30", "dji_wpml", CAMERAS["DJI Matrice 30 wide"],
+        3.77, 0.3, 41, 15, 12, 2 * 131.6, 0.35, drone_enum="67,52,0",
+        notes="Two TB30 batteries. Wide camera is 12 MP 1/2in - fine for inspection, coarse for survey."),
+    "DJI Matrice 30T": Drone(
+        "DJI Matrice 30T", "dji_wpml", CAMERAS["DJI Matrice 30 wide"],
+        3.77, 0.3, 41, 15, 12, 2 * 131.6, 0.35, drone_enum="67,53,1",
+        notes="Two TB30 batteries. Wide camera is 12 MP 1/2in - fine for inspection, coarse for survey."),
     "DJI Matrice 350 RTK + P1": Drone(
         "DJI Matrice 350 RTK + P1", "dji_wpml", CAMERAS["DJI Zenmuse P1 35mm"],
-        7.7, 2.7, 42, 23, 12, 2 * 263, 0.95, drone_enum="89,50"),
+        7.27, 0.16, 46, 15, 12, 2 * 263.2, 0.95, drone_enum="89,50,0",
+        notes="P1 35 mm lens; change focal length to 24 or 50 mm for the other lenses. Two TB65 batteries."),
+    "DJI Matrice 350 RTK + L2": Drone(
+        "DJI Matrice 350 RTK + L2", "dji_wpml", CAMERAS["DJI Zenmuse L2 (RGB)"],
+        7.38, 0.05, 45, 15, 12, 2 * 263.2, 0.95, drone_enum="89,,0",
+        notes="Planned for the L2 RGB camera. DJI hasn't published the L2 WPML payload code: export with a "
+              "Pilot 2 route made with the L2 as the DJI template. LiDAR: plan overlap to your LiDAR spec."),
+    "DJI Matrice 350 RTK + L1": Drone(
+        "DJI Matrice 350 RTK + L1", "dji_wpml", CAMERAS["DJI Zenmuse L1 (RGB)"],
+        7.40, 0.03, 45, 15, 12, 2 * 263.2, 0.95, drone_enum="89,90742,0",
+        notes="Planned for the L1 RGB camera."),
+    "DJI Matrice 300 RTK + P1": Drone(
+        "DJI Matrice 300 RTK + P1", "dji_wpml", CAMERAS["DJI Zenmuse P1 35mm"],
+        7.1, 1.9, 46, 15, 15, 2 * 274, 0.95, drone_enum="60,50,0",
+        notes="P1 35 mm lens; change focal length for the 24 / 50 mm lenses. Two TB60 batteries."),
+    "DJI Matrice 300 RTK + L1": Drone(
+        "DJI Matrice 300 RTK + L1", "dji_wpml", CAMERAS["DJI Zenmuse L1 (RGB)"],
+        7.23, 1.77, 45, 15, 15, 2 * 274, 0.95, drone_enum="60,90742,0",
+        notes="Planned for the L1 RGB camera. Two TB60 batteries."),
+    "DJI Matrice 400 + P1": Drone(
+        "DJI Matrice 400 + P1", "dji_wpml", CAMERAS["DJI Zenmuse P1 35mm"],
+        10.54, 5.2, 59, 15, 12, 977, 1.3, drone_enum="",
+        notes="DJI hasn't published the Matrice 400 WPML aircraft code: export with a Pilot 2 route made on "
+              "this aircraft as the DJI template. TB100 battery."),
+    "DJI Matrice 400 + L2": Drone(
+        "DJI Matrice 400 + L2", "dji_wpml", CAMERAS["DJI Zenmuse L2 (RGB)"],
+        10.65, 5.1, 59, 15, 12, 977, 1.3, drone_enum="",
+        notes="Use a Pilot 2 route made on this aircraft with the L2 as the DJI template (codes not "
+              "published). Planned for the L2 RGB camera."),
+    "DJI Matrice 400 + L3": Drone(
+        "DJI Matrice 400 + L3", "dji_wpml", CAMERAS["DJI Zenmuse L3 (RGB 100 MP)"],
+        11.49, 4.25, 52, 15, 12, 977, 1.3, drone_enum="",
+        notes="Use a Pilot 2 route made on this aircraft with the L3 as the DJI template (codes not "
+              "published). Planned for the L3 100 MP RGB camera (1 s interval); focal length estimated."),
     "DJI Phantom 4 RTK": Drone(
         "DJI Phantom 4 RTK", "dji_wpml", CAMERAS["DJI Phantom 4 RTK"],
         1.391, 0.0, 30, 14, 10, 89.2, 0.17),

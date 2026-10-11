@@ -827,12 +827,12 @@ class _MissionTool(object):
         _payload_messages(p)
         try:
             d = core.get_drone(p["aircraft"].valueAsText)
-            if d.platform == "dji_fly":
+            if d.platform == "dji_fly" or d.needs_dji_template:
                 p["aircraft"].setWarningMessage(d.notes or "No SDK - routes load in DJI Fly only.")
-                if not p["dji_template"].value and FORMAT_LABELS.get(next(iter(p["formats"].values or []), ""), "") == "dji_kmz":
-                    p["dji_template"].setWarningMessage("Create and save any waypoint route in DJI Fly on "
-                                                        "this aircraft, copy its .kmz here so the export "
-                                                        "carries the right aircraft codes.")
+                if not p["dji_template"].value and "dji_kmz" in [FORMAT_LABELS.get(v, "") for v in (p["formats"].values or [])]:
+                    p["dji_template"].setWarningMessage("Create and save any waypoint route on this aircraft "
+                                                        "(DJI Fly or Pilot 2), copy its .kmz here so the "
+                                                        "export carries the right aircraft codes.")
         except Exception:
             pass
         if p["mavlink"].value is not None and not uploader.pymavlink_available():

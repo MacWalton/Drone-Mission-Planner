@@ -17,7 +17,7 @@ jobs:
         working-directory: tests
         run: |
           mkdir -p out
-          for t in test_core test_mini test_basemap test_briefmap test_battery_linear test_obstacles test_payload test_terrain; do
+          for t in test_core test_enterprise test_mini test_basemap test_briefmap test_battery_linear test_obstacles test_payload test_terrain; do
             echo "== $t"; python $t.py > out/$t.log 2>&1 || { tail -30 out/$t.log; exit 1; }
           done
       - uses: actions/upload-artifact@v4

@@ -1481,7 +1481,7 @@ class MissionDock(QDockWidget):
                 kw["firmware"] = self.fw_cb.currentText().lower()
             if key == "dji_kmz":
                 tpl = QSettings().value("dmp/dji_template", "")
-                if self.mission.drone.platform == "dji_fly" or tpl:
+                if self.mission.drone.needs_dji_template or tpl:
                     tpl, _ = QFileDialog.getOpenFileName(
                         self, "Waypoint file created by DJI Fly / Pilot 2 for this aircraft (Cancel = none)",
                         tpl or QSettings().value("dmp/lastdir", ""), "DJI waypoint mission (*.kmz)")

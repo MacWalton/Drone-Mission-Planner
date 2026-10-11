@@ -1,4 +1,4 @@
-# Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox  (v1.7)
+# Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox  (v1.8)
 
 Plan drone mapping missions from a drawn polygon/line or an imported GIS/CAD file, tune them for wind,
 temperature, altitude and payload, plan the battery changes for big jobs and long linear features, and send
@@ -69,8 +69,11 @@ by `tools/make_report_screenshots.py` (needs pyproj and Playwright).
    with *no action* there so the pilot lands). All points can be dragged later and the plan updates.
 4. **Coordinate system** – automatic UTM zone, or any projected CRS (MGA2020/GDA2020, State Plane, ETRS89 …).
    Output layers use this CRS; drone files are always WGS84.
-5. **Aircraft & camera** – pick a profile (DJI M3E, M350+P1, P4 RTK, **Mini 3 Pro / Mini 4 Pro / Mini 5 Pro** (standard and Plus batteries), Air 3, Autel EVO II, generic
-   ArduPilot/PX4 quad and fixed-wing). Every sensor/battery value is editable for custom rigs.
+5. **Aircraft & camera** – pick a profile: the **DJI Enterprise range** (Matrice 4E/4T, Matrice 4D/4TD and
+   3D/3TD dock aircraft, Mavic 3E/3T/3M, Matrice 30/30T, Matrice 350 RTK and 300 RTK with P1 or L1/L2,
+   Matrice 400 with P1/L2/L3 – see *DJI Enterprise aircraft*), Phantom 4 RTK, **Mini 3 Pro / Mini 4 Pro /
+   Mini 5 Pro**, Air 3, Autel EVO II, generic ArduPilot/PX4 quad and fixed-wing. Every sensor/battery value is
+   editable for custom rigs.
 6. **Flight parameters** – **height units (metres or feet)**, flying height **or** ground pixel size (GSD; the
    other updates automatically), **return-to-take-off height** and **battery-change height** (see below), **minimum height above
    ground** (see *Minimum height and obstacles*),
@@ -256,6 +259,37 @@ List everything the aircraft carries – camera or sensor, lights, LiDAR, gimbal
 - The mapping camera in a stock profile is already part of the aircraft's take-off weight. List it only if you
   swap it or add a second one.
 
+## DJI Enterprise aircraft
+
+| Profile | Mapping camera (as planned) | GSD at 100 m | Battery / rated time | DJI codes (WPML) |
+|---|---|---|---|---|
+| Matrice 4E | 4/3" 20 MP, mechanical shutter, 0.5 s | 2.67 cm | 99.5 Wh, 49 min | 99 / 88 / 0 |
+| Matrice 4T | 1/1.3" 48 MP wide | 1.77 cm | 99.5 Wh, 49 min | 99 / 89 / 1 |
+| Matrice 4D · 4TD (Dock 3) | 4/3" 20 MP · 1/1.3" 48 MP | 2.67 · 1.77 cm | 149.9 Wh, 54 min | 100 / 98 / 0 · 100 / 99 / 1 |
+| Matrice 3D · 3TD (Dock 2) | 4/3" 20 MP · 1/1.32" 48 MP | 2.67 · 1.77 cm | 115.2 Wh, 50 min | 91 / 80 / 0 · 91 / 81 / 1 |
+| Mavic 3E · 3T · 3M | 4/3" 20 MP · 1/2" (12 MP mode) · 4/3" 20 MP RGB | 2.67 · 3.60 · 2.67 cm | 77 Wh, 45 / 45 / 43 min | 77 / 66 / 0 · 77 / 67 / 1 · 77 / 68 / 2 |
+| Matrice 30 · 30T | 1/2" 12 MP wide | 3.56 cm | 2 × 131.6 Wh, 41 min | 67 / 52 / 0 · 67 / 53 / 1 |
+| Matrice 350 RTK + P1 · L1 · L2 | P1 35 mm full frame · L1 1" RGB · L2 4/3" RGB | 1.25 · 2.74 · 2.67 cm | 2 × 263.2 Wh, ~45–46 min* | 89 / 50 · 89 / 90742 · 89 / *template* |
+| Matrice 300 RTK + P1 · L1 | P1 35 mm · L1 1" RGB | 1.25 · 2.74 cm | 2 × 274 Wh, ~45–46 min* | 60 / 50 · 60 / 90742 |
+| Matrice 400 + P1 · L2 · L3 | P1 35 mm · L2 4/3" RGB · L3 100 MP RGB | 1.25 · 2.67 · 1.05 cm | 977 Wh, ~52–59 min* | *template* |
+
+Codes are *drone / payload / sub-type* from DJI's Cloud API documentation; they go into the DJI WPML `.kmz` so
+Pilot 2 / FlightHub 2 accept the route. Specs are from DJI's spec pages.
+
+- **\*** Flight time with a gimbal camera is DJI's no-payload time scaled for the camera's weight (an estimate);
+  DJI's own figure for the Matrice 400 is 59 min with an H30T. Edit *rated flight time* once you have your own
+  numbers.
+- **Codes DJI hasn't published** (Matrice 400, Zenmuse L2/L3 payload): create and save any route on the aircraft
+  in Pilot 2, copy its `.kmz` to your computer and choose it as the **DJI template** when exporting. The aircraft
+  and payload codes are copied from it. You're asked for it automatically for these profiles.
+- **P1 lenses**: the profiles use the 35 mm lens; set *focal length* to 24 or 50 mm for the other lenses.
+- **LiDAR (L1/L2/L3)**: the plan is sized for the RGB camera's GSD and overlap. Set the side overlap to your
+  LiDAR point-density spec (e.g. 50 % for L2 at 100 m) – the planner doesn't model LiDAR scan patterns.
+- **Dock aircraft** (Matrice 4D/4TD, 3D/3TD): import the `.kmz` in *FlightHub 2 ▸ Flight Route Library*; the take-off
+  point is the dock.
+- **Mavic 3T**: planned in 12 MP mode – 48 MP photos can't be timed at 2 s.
+- The Phantom 4 RTK profile stays for existing fleets (it uses GS RTK, not Pilot 2 – export KML).
+
 ## DJI Mini Pro series
 
 | Profile | Camera (as planned) | Battery | Best way to fly the mission |
@@ -391,6 +425,8 @@ dronemapper_core/
   `.bak`; basemap tiles positioned and checked visually in Chromium, offline fallback, QGIS current-map
   fallback to OSM, ArcGIS basemap matching. Tile servers were not reachable from the build machine (tiles were
   simulated), so the first live basemap download is on your machine.
+- v1.8: every DJI Enterprise profile planned and exported to DJI WPML with the expected aircraft / payload /
+  sub-type codes; profiles without published codes take them from a Pilot 2 template.
 - Not yet flown on real aircraft: run a short test mission (or ArduPilot SITL) before production work.
 
 ## Development
