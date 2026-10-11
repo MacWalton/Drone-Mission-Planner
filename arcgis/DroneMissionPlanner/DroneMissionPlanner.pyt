@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 # -*- coding: utf-8 -*-
 """Drone Mission Planner - ArcGIS Pro Python toolbox.
 

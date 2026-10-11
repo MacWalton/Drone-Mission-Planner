@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """QGIS plugin entry: toolbar button + menu that opens the planner dock."""
 import os
 

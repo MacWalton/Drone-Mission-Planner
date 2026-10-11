@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Battery-change logistics: turns a multi-flight mission into a field schedule.
 
 Simulates the day on site: battery sets (a set = what one flight needs, e.g. a

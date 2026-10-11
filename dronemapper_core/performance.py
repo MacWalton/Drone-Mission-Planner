@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Flight-endurance model: wind, temperature, altitude and payload.
 
 The model scales the manufacturer's rated endurance (sea level, 15 C,

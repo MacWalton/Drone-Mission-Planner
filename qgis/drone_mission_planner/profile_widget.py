@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Route elevation profile chart: ground vs flight altitude by chainage (KP)."""
 from qgis.PyQt.QtCore import Qt, QPointF, QRectF
 from qgis.PyQt.QtGui import QPainter, QPen, QBrush, QColor, QPolygonF, QFont

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Map tools: draw a polygon / line, pick a point."""
 from qgis.PyQt.QtCore import Qt, pyqtSignal
 from qgis.PyQt.QtGui import QColor

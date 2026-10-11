@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Bundle the shared engine into both plugins and build the install zips.
 
     python tools/build.py          -> dist/drone_mission_planner_qgis.zip

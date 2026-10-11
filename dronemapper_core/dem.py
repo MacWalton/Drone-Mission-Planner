@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Elevation data: free global DEM download and fast sampling.
 
 Sources (no account or key needed):

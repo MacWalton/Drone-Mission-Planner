@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Camera / ground-sample-distance maths.
 
 Convention: the image's long side (image_width_px) lies ACROSS the flight

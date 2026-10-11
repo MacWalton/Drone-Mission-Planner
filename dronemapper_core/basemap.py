@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Online basemap tiles under the field-brief maps.
 
 Standard XYZ (Web Mercator, 256 px) tiles are fetched for the map extent and

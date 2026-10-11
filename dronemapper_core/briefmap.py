@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Mission overview map for the field brief, as inline SVG (no dependencies).
 
 Draws the boundary / corridor, every flight (survey lines solid, transits to

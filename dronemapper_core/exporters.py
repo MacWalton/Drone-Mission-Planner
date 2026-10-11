@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Mission file writers for the main drone ecosystems.
 
 Format                     | Flies on

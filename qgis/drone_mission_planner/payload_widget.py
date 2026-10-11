@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Payload list: items carried on the aircraft with weight and power draw."""
 import json
 

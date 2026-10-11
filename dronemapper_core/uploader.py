@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Sending missions to aircraft.
 
 * MAVLink (ArduPilot, PX4 and anything that speaks MAVLink mission

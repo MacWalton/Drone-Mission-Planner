@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Height units. Everything is computed and exported in metres (drones expect
 metres); feet are only for entering and displaying heights."""
 

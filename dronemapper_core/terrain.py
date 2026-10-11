@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Terrain safety checks and route elevation profiles (needs a DEM).
 
 check_terrain() follows every flight's real 3D path - vertical climb at the

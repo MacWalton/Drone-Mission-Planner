@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Mission planner: area (grid / double-grid) and route (linear corridor) missions,
 with battery-change planning across one or more launch stations."""
 import math

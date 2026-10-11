@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Memory layers that hold the editable inputs and the planned mission."""
 from qgis.PyQt.QtCore import QVariant
 from qgis.PyQt.QtGui import QColor

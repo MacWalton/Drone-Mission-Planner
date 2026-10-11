@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Drone mission planning core - shared by the QGIS plugin and ArcGIS toolbox.
 
 Pure Python 3 (no GIS dependencies). pymavlink is optional (live upload).

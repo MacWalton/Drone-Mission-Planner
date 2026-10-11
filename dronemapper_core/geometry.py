@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Planar geometry used by the planner.
 
 All coordinates are in a projected, metric CRS (metres). The GIS wrappers

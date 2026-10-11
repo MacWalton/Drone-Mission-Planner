@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Obstacles: tree canopy, powerlines, towers, buildings - anything the aircraft
 must stay above.
 

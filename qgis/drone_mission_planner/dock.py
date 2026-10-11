@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Drone Mission Planner dock panel."""
 import os
 import tempfile

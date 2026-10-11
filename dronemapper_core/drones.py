@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Drone and camera profiles.
 
 Values are typical manufacturer figures and are only defaults - every field
