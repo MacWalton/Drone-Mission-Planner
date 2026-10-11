@@ -1,4 +1,4 @@
-# Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox  (v1.8)
+# Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox  (v1.9)
 
 Plan drone mapping missions from a drawn polygon/line or an imported GIS/CAD file, tune them for wind,
 temperature, altitude and payload, plan the battery changes for big jobs and long linear features, and send
@@ -88,10 +88,27 @@ by `tools/make_report_screenshots.py` (needs pyproj and Playwright).
    following, per-station heights, safe transits, terrain checks and the route profile.
 8. **Battery changes & field schedule** – see below.
 9. **Plan** – layers: boundary, survey legs, flight routes (coloured per battery, with launch station, battery
-   set, clock times and KP range), waypoints, photo centres, launch stations, chainage markers. The report
+   set, clock times and KP range), waypoints, photo centres, **image footprints**, launch stations, chainage
+   markers. The report
    gives GSD, spacing, photo count, time and battery use per flight, plus the field schedule.
 10. **Export / upload** (see below), including a printable **field brief** with mission maps drawn over a
     **basemap** (see *Field-brief basemap*).
+
+## Image footprints
+
+Every photo gets its ground footprint – the rectangle the image covers – in the **Image footprints** layer
+(QGIS) or the `_footprints` feature class (ArcGIS), outlined in its flight's colour so overlap and coverage
+are easy to check.
+
+- Placed where the camera actually fires along the planned flights (trigger distance, restarting at each line;
+  the hover points in stop-and-shoot mode), turned to the flight direction, portrait setting respected.
+- Sized from the camera and the **height above ground at that photo** – with a DEM the real ground, so
+  footprints shrink over hills and grow over valleys; without one, ground level with the launch station.
+- Attributes: flight, photo number, height above ground, GSD, across- and along-track size, heading. Style by
+  `gsd_cm` to see resolution vary over terrain, or select a flight to check its coverage.
+- Nadir camera assumed (gimbal −90°). Photo centres use the same positions and numbering.
+
+![Image footprints in QGIS](docs/screenshots/qgis_footprints.png)
 
 ## Big jobs: battery changes & launch stations
 
@@ -388,6 +405,7 @@ dronemapper_core/
   dem.py             DEM download (Copernicus GLO-30, AWS Terrain Tiles), PNG decoder, fast sampler
   terrain.py         terrain clearance / height-limit checks, GSD over terrain, route profile
   exporters.py       DJI WPML, QGC .plan, Mission Planner, Litchi, KML, GeoJSON, CSV, field brief (HTML)
+  footprints.py      photo positions along the flights and image footprints (terrain-aware)
   pdfreport.py       mission report as PDF (pure-Python PDF writer, SVG maps drawn as vector)
   uploader.py        MAVLink upload (live or from file), copy-to-device, replace a DJI Fly mission
   basemap.py         online basemap tiles (OSM, Esri) for the field-brief maps
@@ -439,6 +457,8 @@ dronemapper_core/
 - v1.8: PDF report validated with qpdf and text-extracted (title, wind, flights, attribution) with palette-PNG,
   RGB/RGBA-PNG and JPEG basemap tiles and with QGIS-rendered backgrounds; wind entered in knots converts
   exactly to m/s for planning and back when the unit is switched.
+- v1.9: image footprints – photo count matches the plan, front overlap measured from consecutive footprints
+  equals the setting, footprints shrink with height above ground on a slope (DEM).
 - Not yet flown on real aircraft: run a short test mission (or ArduPilot SITL) before production work.
 
 ## Development
@@ -451,7 +471,7 @@ tools/build.py             copies the engine into both plugins and writes dist/*
 tests/                     test scripts, a headless QGIS iface, an arcpy stand-in, sample DEM/CAD data
 docs/examples/             example mission reports (PDF) and field briefs (HTML)
 docs/screenshots/          README images (tools/make_*_screenshots.py)
-docs/releases/             release notes (v1.7.0, v1.8.0)
+docs/releases/             release notes (v1.7.0 – v1.9.0)
 ```
 
 ```

@@ -1438,10 +1438,15 @@ class MissionDock(QDockWidget):
                             [f.index + 1, i, w.kind, round(w.alt, 1), round(w.speed, 1),
                              round(w.photo_dist, 1)]))
         L.add(out[L.WAYPOINTS], wps)
-        pts = m.photo_points()
-        if len(pts) <= 20000:
-            L.add(out[L.PHOTOS], [(QgsGeometry.fromPointXY(QgsPointXY(*p)), [i + 1])
-                                  for i, p in enumerate(pts)])
+        fps = m.photo_footprints()
+        if len(fps) <= 20000:
+            L.add(out[L.PHOTOS], [(QgsGeometry.fromPointXY(QgsPointXY(f["x"], f["y"])), [f["n"]]) for f in fps])
+            L.add(out[L.FOOTPRINTS], [(QgsGeometry.fromPolygonXY([[QgsPointXY(*q) for q in f["ring"]]]),
+                                       [f["flight"], f["n"], round(f["agl_m"], 1), round(f["gsd_cm"], 2),
+                                        round(f["across_m"], 1), round(f["along_m"], 1),
+                                        round(f["heading_deg"], 1)]) for f in fps])
+        else:
+            self.msg("%d photos - photo centres and image footprints are not drawn above 20 000." % len(fps))
         # terrain problem spots
         tl = L.terrain_layer(crs)
         L.clear(tl)

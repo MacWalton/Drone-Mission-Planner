@@ -39,3 +39,22 @@ for name in drone_names():
 assert not get_drone("DJI Matrice 4E").needs_dji_template and get_drone("DJI Matrice 400 + P1").needs_dji_template
 assert get_drone("DJI Mini 5 Pro").needs_dji_template and not get_drone("DJI Mini 4 Pro").needs_dji_template
 print("enterprise profiles OK:", n)
+
+# ---- image footprints
+import math
+m = plan_mission(MissionParams(gsd_cm=2.0, front_overlap_pct=80, side_overlap_pct=70), get_drone("DJI Matrice 4E"),
+                 Conditions(), blk, (x0 - 30, y0 - 30))
+fp = m.photo_footprints()
+assert len(fp) == len(m.photo_points()) and abs(len(fp) - m.photos) <= max(3, 0.02 * m.photos), (len(fp), m.photos)
+a, b = fp[0], fp[1]
+front = 1 - math.hypot(a["x"] - b["x"], a["y"] - b["y"]) / a["along_m"]
+assert abs(front - 0.80) < 0.01, front
+assert abs(a["gsd_cm"] - 2.0) < 0.01 and len(a["ring"]) == 5
+ground = lambda x, y: 20 + 0.05 * (x - x0)             # rising 5 % to the east, planned flat
+mt = plan_mission(MissionParams(gsd_cm=2.0), get_drone("DJI Matrice 4E"), Conditions(), blk, (x0 - 30, y0 - 30),
+                  ground_elevation=ground)
+ft = mt.photo_footprints()
+east, west = max(ft, key=lambda f: f["x"]), min(ft, key=lambda f: f["x"])
+assert east["agl_m"] < west["agl_m"] and east["across_m"] < west["across_m"]
+print("footprints OK: %d photos, front overlap %.0f%%, %0.f x %.0f m; on a slope %.0f -> %.0f m AGL"
+      % (len(fp), front * 100, a["across_m"], a["along_m"], west["agl_m"], east["agl_m"]))

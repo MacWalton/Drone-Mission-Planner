@@ -149,6 +149,24 @@ compose(m_img, p2.copy(0, y - 52, p2.width(), 760),
 d.report.setMinimumHeight(0); d.report.setMaximumHeight(16777215)
 print("wrote docs/screenshots/qgis_panel_full.png")
 
+# image footprints, zoomed to the south-west corner of the block
+fl = L.find(L.FOOTPRINTS)
+print("image footprints:", fl.featureCount())
+lyrs = [L.find(n) for n in (L.SITE, L.WAYPOINTS, L.ROUTES, L.PHOTOS, L.BOUNDARY) if L.find(n)] + [fl]
+ms = QgsMapSettings()
+ms.setLayers(lyrs)
+ms.setDestinationCrs(c3857)
+ms.setExtent(xf.transformBoundingBox(QgsRectangle(115.7326, -32.3010, 115.7366, -32.2988)))
+ms.setOutputSize(QSize(1200, 700))
+ms.setOutputDpi(110)
+ms.setBackgroundColor(PAPER)
+job = QgsMapRendererParallelJob(ms)
+job.start()
+job.waitForFinished()
+compose(job.renderedImage(), QImage(0, 0, QImage.Format.Format_RGB32),
+        "Image footprints - one rectangle per photo, coloured by flight (QGIS layer 'Image footprints')",
+        os.path.join(OUT, "qgis_footprints.png"))
+
 dlg = UploadDialog(d)
 w = max(dlg.sizeHint().width(), 760)
 dlg.layout().activate()

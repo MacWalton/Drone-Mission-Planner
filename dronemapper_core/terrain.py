@@ -276,6 +276,8 @@ def analyse(mission, ground=None, min_clearance=30.0, max_agl=120.0):
     """Run the checks (and the route profile) and attach them to the mission.
     ground=None: no DEM - ground assumed level with the take-off (obstacle checks only)."""
     flat = ground is None
+    if not flat:
+        mission.ground = ground                       # footprints use the real ground too
     if flat:
         ground = flat_ground(mission)
     rep = check_terrain(mission, ground, min_clearance, max_agl, ground_checks=not flat)

@@ -132,6 +132,7 @@ class Mission:
     battery_height_m: float = None
     obstacles: object = None          # obstacles.ObstacleSet
     min_agl_m: float = None
+    ground: object = None             # f(x, y) -> m AMSL used for planning (DEM), if any
 
     @property
     def waypoints(self):
@@ -145,14 +146,13 @@ class Mission:
         return self.station_labels.get(tuple(pt), "?")
 
     def photo_points(self):
-        pts = []
-        for a, b in self.lines:
-            L = G.dist(a, b)
-            n = P.photos_for_length(L, self.trigger_m)
-            for k in range(n):
-                t = min(1.0, k * self.trigger_m / L) if L else 0
-                pts.append((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t))
-        return pts
+        """Photo centres along the planned flights (same order as photo_footprints)."""
+        from .footprints import photo_positions
+        return [(x, y) for _, x, y, _, _, _ in photo_positions(self)]
+
+    def photo_footprints(self, ground=None):
+        from .footprints import photo_footprints
+        return photo_footprints(self, ground)
 
     def chainage_markers(self, interval=100.0):
         if not self.centreline:
@@ -1144,6 +1144,7 @@ def plan_mission(params: MissionParams, drone, conditions: Conditions,
     mission.rth_height_m, mission.battery_height_m = rth_h, batt_h
     mission.obstacles = obs
     mission.min_agl_m = min_agl or None
+    mission.ground = ground_elevation if use_dem else None
     sched, labels = build_schedule(flights, launch, logistics or LogisticsParams(), land_final)
     mission.schedule, mission.station_labels = sched, labels
     if sched.waiting_min > 1 and len(flights) > 1:

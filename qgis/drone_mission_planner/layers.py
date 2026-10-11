@@ -17,6 +17,7 @@ ROUTES = "Flight routes"
 WAYPOINTS = "Waypoints"
 PHOTOS = "Photo centres"
 FOOTPRINT = "Corridor footprint"
+FOOTPRINTS = "Image footprints"
 CHAINAGE = "Chainage"
 TERRAIN = "Terrain warnings"
 
@@ -62,7 +63,10 @@ def get_or_create(name, geom, crs, fields, style=None):
         if style:
             style(lyr)
         project().addMapLayer(lyr, False)
-        group().insertLayer(0, lyr)
+        if name == FOOTPRINTS:                 # under the flight lines
+            group().addLayer(lyr)
+        else:
+            group().insertLayer(0, lyr)
     return lyr
 
 
@@ -106,6 +110,17 @@ def _style_routes(l):
     for i in range(1, 101):
         s = QgsLineSymbol.createSimple({"line_color": palette[(i - 1) % len(palette)],
                                         "line_width": "0.5"})
+        cats.append(QgsRendererCategory(i, s, "Flight %d" % i))
+    l.setRenderer(QgsCategorizedSymbolRenderer("flight", cats))
+
+
+def _style_footprints(l):
+    cats = []
+    palette = ["30,120,255", "230,60,60", "40,170,80", "160,70,200", "240,150,20", "0,170,170"]
+    for i in range(1, 101):
+        c = palette[(i - 1) % len(palette)]
+        s = QgsFillSymbol.createSimple({"style": "no", "color": c + ",0", "outline_color": c + ",170",
+                                        "outline_width": "0.25"})         # outlines: overlap stays readable
         cats.append(QgsRendererCategory(i, s, "Flight %d" % i))
     l.setRenderer(QgsCategorizedSymbolRenderer("flight", cats))
 
@@ -182,6 +197,10 @@ def output_layers(crs):
                                   ("alt_m", T_DBL), ("speed_ms", T_DBL), ("photo_m", T_DBL)],
                                  _style_wps),
         PHOTOS: get_or_create(PHOTOS, "Point", crs, [("n", T_INT)], _style_photos),
+        FOOTPRINTS: get_or_create(FOOTPRINTS, "Polygon", crs,
+                                  [("flight", T_INT), ("photo", T_INT), ("agl_m", T_DBL), ("gsd_cm", T_DBL),
+                                   ("across_m", T_DBL), ("along_m", T_DBL), ("heading", T_DBL)],
+                                  _style_footprints),
     }
     for lyr in out.values():                 # working CRS may have changed
         if lyr.crs() != crs:

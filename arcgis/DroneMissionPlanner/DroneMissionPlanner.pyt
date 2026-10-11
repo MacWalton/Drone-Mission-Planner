@@ -772,6 +772,7 @@ class _MissionTool(object):
                                 ("out_routes", "Flight routes", "DEFeatureClass"),
                                 ("out_waypoints", "Waypoints", "DEFeatureClass"),
                                 ("out_photos", "Photo centres", "DEFeatureClass"),
+                                ("out_footprints", "Image footprints", "DEFeatureClass"),
                                 ("out_site", "Launch stations and landing", "DEFeatureClass"),
                                 ("out_chainage", "Chainage markers", "DEFeatureClass"),
                                 ("out_schedule", "Flight & battery schedule", "DETable"),
@@ -1115,11 +1116,23 @@ class _MissionTool(object):
                                    round(w.speed, 1), round(w.photo_dist, 1)])
         out["out_waypoints"] = path
 
-        path = _new_fc(gdb, prefix + "_photos", "POINT", sr, [("n", "LONG")])
-        with arcpy.da.InsertCursor(path, ["SHAPE@XY", "n"]) as cur:
-            for i, q in enumerate(m.photo_points()):
-                cur.insertRow([q, i + 1])
+        fps = m.photo_footprints()
+        path = _new_fc(gdb, prefix + "_photos", "POINT", sr, [("n", "LONG"), ("flight", "LONG")])
+        with arcpy.da.InsertCursor(path, ["SHAPE@XY", "n", "flight"]) as cur:
+            for f in fps:
+                cur.insertRow([(f["x"], f["y"]), f["n"], f["flight"]])
         out["out_photos"] = path
+
+        path = _new_fc(gdb, prefix + "_footprints", "POLYGON", sr,
+                       [("flight", "LONG"), ("photo", "LONG"), ("agl_m", "DOUBLE"), ("gsd_cm", "DOUBLE"),
+                        ("across_m", "DOUBLE"), ("along_m", "DOUBLE"), ("heading", "DOUBLE")])
+        with arcpy.da.InsertCursor(path, ["SHAPE@", "flight", "photo", "agl_m", "gsd_cm", "across_m",
+                                          "along_m", "heading"]) as cur:
+            for f in fps:
+                cur.insertRow([arcpy.Polygon(A([Pt(*q) for q in f["ring"]]), sr), f["flight"], f["n"],
+                               round(f["agl_m"], 1), round(f["gsd_cm"], 2), round(f["across_m"], 1),
+                               round(f["along_m"], 1), round(f["heading_deg"], 1)])
+        out["out_footprints"] = path
 
         path = _new_fc(gdb, prefix + "_site", "POINT", sr,
                        [("role", "TEXT"), ("name", "TEXT"), ("flights", "LONG")])
