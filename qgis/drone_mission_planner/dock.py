@@ -254,7 +254,8 @@ class MissionDock(QDockWidget):
         self.maxpay = dspin(0, 30, 0.0, 2, "kg", 0.1)
         self.rated = dspin(1, 600, 30, 0, "min")
         self.vmax = dspin(1, 60, 15, 1, "m/s")
-        self.maxwind = dspin(1, 40, 12, 1, "m/s")
+        self.maxwind = dspin(1, 80, 23, 0, "kn")
+        self._wunit = "kn"
         self.batt_wh = dspin(0, 20000, 77, 0, "Wh", 10)
         self.batt_wh.setToolTip("Total energy of the battery set for one flight (both packs on dual-"
                                 "battery aircraft). Needed to account for accessory power.")
@@ -359,9 +360,14 @@ class MissionDock(QDockWidget):
         # ---- 6. Conditions
         g = QGroupBox("6  Conditions (flight-time optimisation)")
         f = QFormLayout(g)
-        self.wind = dspin(0, 40, 0, 1, "m/s", 0.5)
+        self.wind = dspin(0, 80, 0, 0, "kn", 1)
         self.wdir = dspin(0, 359, 0, 0, "° from", 10)
-        row = QHBoxLayout(); row.addWidget(self.wind); row.addWidget(self.wdir)
+        self.wind_unit_cb = QComboBox()
+        for u in ("kn", "m/s", "km/h"):
+            self.wind_unit_cb.addItem(u, u)
+        self.wind_unit_cb.setToolTip("Wind speed unit (also used for the aircraft's max wind). "
+                                     "Calculations use m/s internally.")
+        row = QHBoxLayout(); row.addWidget(self.wind, 2); row.addWidget(self.wind_unit_cb, 1); row.addWidget(self.wdir, 2)
         f.addRow("Wind speed / direction", row)
         self.temp = dspin(-40, 55, 20, 0, "°C")
         f.addRow("Air temperature", self.temp)
@@ -547,6 +553,11 @@ class MissionDock(QDockWidget):
         self.unit_cb.currentIndexChanged.connect(self._unit_changed)
         self.rth_h.valueChanged.connect(self._param_changed)
         self.batt_h.valueChanged.connect(self._param_changed)
+        self._wunit = "kn"
+        self.wind_unit_cb.currentIndexChanged.connect(self._wind_unit_changed)
+        wsaved = QSettings().value("dmp/wind_unit", "kn")
+        if wsaved in ("m/s", "km/h"):
+            self.wind_unit_cb.setCurrentIndex(self.wind_unit_cb.findData(wsaved))
         saved = QSettings().value("dmp/height_unit", "m")
         if saved == "ft":
             self.unit_cb.setCurrentIndex(1)
@@ -664,6 +675,31 @@ class MissionDock(QDockWidget):
     def _set_m(self, spin, metres):
         spin.setValue(core.units.from_m(metres, self._unit))
 
+    def _wind_ms(self, spin):
+        return core.units.wind_to_ms(spin.value(), self._wunit)
+
+    def _set_wind_ms(self, spin, ms):
+        spin.setValue(core.units.wind_from_ms(ms, self._wunit))
+
+    def _wind_unit_changed(self, *_):
+        new = self.wind_unit_cb.currentData()
+        old = self._wunit
+        if new == old:
+            return
+        for spin, hi_ms in ((self.wind, 41.0), (self.maxwind, 41.0)):
+            ms = core.units.wind_to_ms(spin.value(), old)
+            spin.blockSignals(True)
+            spin.setDecimals(1 if new == "m/s" else 0)
+            spin.setSingleStep(0.5 if new == "m/s" else 1)
+            spin.setRange(0, core.units.wind_from_ms(hi_ms, new))
+            spin.setSuffix(" " + new)
+            spin.setValue(core.units.wind_from_ms(ms, new))
+            spin.blockSignals(False)
+        self._wunit = new
+        QSettings().setValue("dmp/wind_unit", new)
+        if self.mission is not None:
+            self.plan(quiet=True)
+
     def _unit_changed(self, *_):
         new = self.unit_cb.currentData()
         old = self._unit
@@ -710,7 +746,7 @@ class MissionDock(QDockWidget):
         self.ih.setValue(c.image_height_px); self.interval.setValue(c.min_trigger_interval_s)
         self.mass.setValue(d.empty_mass_kg); self.maxpay.setValue(d.max_payload_kg)
         self.rated.setValue(d.rated_flight_time_min); self.vmax.setValue(d.max_speed_ms)
-        self.maxwind.setValue(d.max_wind_ms)
+        self._set_wind_ms(self.maxwind, d.max_wind_ms)
         self.batt_wh.setValue(d.battery_wh)
         self.enum.setText(d.drone_enum)
         for w in widgets:
@@ -733,7 +769,7 @@ class MissionDock(QDockWidget):
         c.min_trigger_interval_s = self.interval.value()
         d.empty_mass_kg, d.max_payload_kg = self.mass.value(), self.maxpay.value()
         d.rated_flight_time_min, d.max_speed_ms = self.rated.value(), self.vmax.value()
-        d.max_wind_ms = self.maxwind.value()
+        d.max_wind_ms = self._wind_ms(self.maxwind)
         d.battery_wh = self.batt_wh.value()
         d.drone_enum = self.enum.text().strip()
         return d
@@ -1288,7 +1324,7 @@ class MissionDock(QDockWidget):
 
     def conditions(self):
         return core.Conditions(
-            wind_speed_ms=self.wind.value(), wind_from_deg=self.wdir.value(),
+            wind_speed_ms=self._wind_ms(self.wind), wind_from_deg=self.wdir.value(), wind_unit=self._wunit,
             temperature_c=self.temp.value(), site_elevation_m=self._m(self.elev),
             payload_kg=0.0, payload_items=self.payload_tbl.items(), reserve_pct=self.reserve.value(),
             battery_health_pct=self.health.value())
@@ -1488,7 +1524,7 @@ class MissionDock(QDockWidget):
                     if tpl:
                         QSettings().setValue("dmp/dji_template", tpl)
                         kw["template"] = tpl
-            if key == "brief":
+            if key in ("brief", "brief_pdf"):
                 kw["kp_interval"] = self.kp_int.value() or None
                 bg = self._brief_background()
                 if bg is not None:

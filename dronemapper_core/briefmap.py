@@ -312,10 +312,10 @@ def legend_html(mission):
             'details.</div>' % (INK2, "".join("<span>%s</span>" % i for i in items), MUTED))
 
 
-def section_maps(mission, width=440, background_fn=None):
-    """One zoomed map per launch station (route missions with several stations):
-    that station's flights are emphasised, the rest faded.
-    background_fn(extent, (w, h)) -> PNG bytes or None."""
+def section_views(mission, width=440, background_fn=None):
+    """[(caption, svg)] - one zoomed map per launch station (routes with several
+    stations): that station's flights emphasised, the rest faded.
+    background_fn(extent, (w, h)) -> background or None."""
     out = []
     for k, st in enumerate(mission.stations):
         idx = {f.index for f in mission.flights if tuple(f.station_start) == tuple(st)}
@@ -327,11 +327,16 @@ def section_maps(mission, width=440, background_fn=None):
         bg = background_fn(view[0], (width, view[1])) if background_fn else None
         names = ", ".join(str(i + 1) for i in sorted(idx))
         kp = [mission.flights[i].chainage for i in sorted(idx) if mission.flights[i].chainage]
-        kp_txt = (" &middot; KP %.2f&ndash;%.2f" % (min(a for a, _ in kp) / 1000, max(b for _, b in kp) / 1000)) if kp else ""
-        out.append('<div class="sec"><div style="font-weight:600;font-size:13px;margin:0 0 4px">%s &middot; '
-                   'flight%s %s%s</div>%s</div>'
-                   % (escape(mission.label(st)), "s" if len(idx) > 1 else "", names, kp_txt,
-                      svg_map(mission, width, bg, None, "%s section" % mission.label(st), view, idx)))
+        kp_txt = (" \u00b7 KP %.2f\u2013%.2f" % (min(a for a, _ in kp) / 1000, max(b for _, b in kp) / 1000)) if kp else ""
+        cap = "%s \u00b7 flight%s %s%s" % (mission.label(st), "s" if len(idx) > 1 else "", names, kp_txt)
+        out.append((cap, svg_map(mission, width, bg, None, "%s section" % mission.label(st), view, idx)))
+    return out
+
+
+def section_maps(mission, width=440, background_fn=None):
+    """HTML block of section maps (see section_views)."""
+    out = ['<div class="sec"><div style="font-weight:600;font-size:13px;margin:0 0 4px">%s</div>%s</div>'
+           % (escape(cap), svg) for cap, svg in section_views(mission, width, background_fn)]
     if not out:
         return ""
     return ('<h2>Section maps</h2><div style="display:grid;grid-template-columns:repeat(auto-fill,'

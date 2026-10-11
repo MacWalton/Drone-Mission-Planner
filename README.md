@@ -35,16 +35,17 @@ shown side by side rather than inside the full QGIS window.*
 
 ### Mission report (field brief)
 
-The field brief is a single HTML page for the site crew – open it on a tablet or print it.
-Full samples: [area brief](docs/examples/sample_area_brief.html) · [route brief](docs/examples/sample_route_brief.html)
-(download and open in a browser).
+The mission report exports as a **PDF** anyone can open (phone, tablet, PC – prints on A4) or as an
+interactive HTML page. Samples: [area report (PDF)](docs/examples/sample_area_report.pdf) ·
+[route report (PDF)](docs/examples/sample_route_report.pdf) · [area brief (HTML)](docs/examples/sample_area_brief.html) ·
+[route brief (HTML)](docs/examples/sample_route_brief.html).
 
 | | |
 |---|---|
 | **Summary** – aircraft, heights, GSD, photos, flight time, wind, payload, time on site, battery sets ![Brief summary](docs/screenshots/report_area_summary.png) | **Mission map** – every flight numbered and coloured, transits, launch stations, obstacles, scale and north; payload table ![Brief map](docs/screenshots/report_area_map.png) |
 | **Launch stations and flights & battery plan** – clock times, battery sets, mid-line battery changes, tick-off column ![Brief flights](docs/screenshots/report_area_flights.png) | **Terrain & obstacle check** ![Brief terrain](docs/screenshots/report_area_terrain.png) |
 | **Route overview map** with chainage ![Route brief map](docs/screenshots/report_route_map.png) | **Section maps** – one zoomed map per launch station ![Route section maps](docs/screenshots/report_route_sections.png) |
-| **Route elevation profile** – ground and flight altitude along the KP ![Route profile](docs/screenshots/report_route_profile.png) | |
+| **Route elevation profile** – ground and flight altitude along the KP ![Route profile](docs/screenshots/report_route_profile.png) | **PDF report** – page 1 of the area report ![PDF report page 1](docs/screenshots/report_pdf_page1.png) |
 
 The panel images are made by `tools/make_app_screenshots.py` (run it with QGIS's Python) and the report images
 by `tools/make_report_screenshots.py` (needs pyproj and Playwright).
@@ -80,7 +81,8 @@ by `tools/make_report_screenshots.py` (needs pyproj and Playwright).
    front/side overlap, line heading (auto fewest lines / manual / align with wind), crosshatch for 3D,
    coverage margin, run-in/out, speed (auto-optimised or fixed), gimbal pitch, shutter, portrait camera,
    **photo trigger** (every N m / camera timed shot / stop & shoot — see *DJI Mini Pro series*).
-7. **Conditions & terrain** – wind speed & direction, temperature, take-off elevation (or *From DEM*), the
+7. **Conditions & terrain** – wind speed (**knots** by default; m/s or km/h selectable – the aircraft's max
+   wind uses the same unit) & direction, temperature, take-off elevation (or *From DEM*), the
    **payload list** (see below),
    battery reserve & health. **DEM**: pick one you have, or click *Download DEM* (see below) – used for terrain
    following, per-station heights, safe transits, terrain checks and the route profile.
@@ -114,7 +116,15 @@ Large areas and long routes need many batteries. The planner builds the whole da
 - **Field schedule** – battery sets on site, chargers, charge time, swap/pre-flight time, setup, drive speed and
   pack-up time per move, and arrival time give a clock-time plan: which set flies which flight, waits for
   charging, drives, and total time on site, plus how many battery sets would remove waiting.
-- **Field brief** (`.html`, prints well) – mission name, summary, **mission map**, station coordinates, payload,
+- **Mission report / field brief** – two formats with the same content:
+  - **PDF** (*Mission report / field brief (.pdf)*) – opens in any PDF reader on any phone, tablet or PC, prints
+    on A4, and can be emailed to the client or crew. Maps and the elevation profile are vector graphics, the
+    basemap is embedded, page numbers in the footer, tick boxes for each flight. Made in plain Python, so it
+    works the same in QGIS and ArcGIS Pro with nothing extra to install.
+  - **HTML** (*Field brief & battery plan (.html)*) – the interactive version: hover a flight on the map for its
+    times and battery.
+
+  Both show the mission name, summary, **mission map**, station coordinates, payload,
   terrain section and a flight-by-flight table (launch → land, battery set, start/end, battery %, photos, KP
   range, notes) with tick boxes.
   - **Mission map**: boundary/corridor, every flight (survey lines solid, transits dashed) numbered on the map,
@@ -122,9 +132,7 @@ Large areas and long routes need many batteries. The planner builds the whole da
     flights get distinct colours; more use a light-to-dark blue in flight order. Hover a flight for its times,
     battery set and %.
   - **Section maps**: routes with several launch stations get a zoomed map per station.
-  - **Background**: in QGIS, the layers visible in your map (aerial imagery, basemap, cadastre…) are rendered
-    under the brief maps – untick *Field brief: show visible map layers* for a plain map. In ArcGIS the maps
-    are drawn without a background.
+  - **Basemap** under the maps – see *Field-brief basemap*.
 - Every flight is exported as its own file with its own home position, ready to fly in order.
 
 ## Heights: metres or feet, return-to-take-off and battery-change heights
@@ -205,7 +213,7 @@ The rated endurance (sea level, 15 °C, no wind, no payload) is scaled by:
   on top of the power to fly.
 - **Altitude & temperature** – air density (ISA) at take-off elevation + flight height; thin air costs power.
 - **Cold batteries** – usable capacity drops below ~20 °C (85 % at 0 °C, 70 % at −10 °C).
-- **Wind** – every leg is costed with its real airspeed (multirotor) or ground speed (fixed-wing), so headwind
+- **Wind** – entered in knots (or m/s / km/h); every leg is costed with its real airspeed (multirotor) or ground speed (fixed-wing), so headwind
   legs, tailwind legs and crosswind all count.
 - **Reserve & battery health** – always held back.
 
@@ -379,7 +387,8 @@ dronemapper_core/
   logistics.py       field schedule: battery sets, chargers, charge/swap/drive times
   dem.py             DEM download (Copernicus GLO-30, AWS Terrain Tiles), PNG decoder, fast sampler
   terrain.py         terrain clearance / height-limit checks, GSD over terrain, route profile
-  exporters.py       DJI WPML, QGC .plan, Mission Planner, Litchi, KML, GeoJSON, CSV, field brief
+  exporters.py       DJI WPML, QGC .plan, Mission Planner, Litchi, KML, GeoJSON, CSV, field brief (HTML)
+  pdfreport.py       mission report as PDF (pure-Python PDF writer, SVG maps drawn as vector)
   uploader.py        MAVLink upload (live or from file), copy-to-device, replace a DJI Fly mission
   basemap.py         online basemap tiles (OSM, Esri) for the field-brief maps
   briefmap.py        field-brief maps (SVG)
@@ -427,6 +436,9 @@ dronemapper_core/
   simulated), so the first live basemap download is on your machine.
 - v1.8: every DJI Enterprise profile planned and exported to DJI WPML with the expected aircraft / payload /
   sub-type codes; profiles without published codes take them from a Pilot 2 template.
+- v1.8: PDF report validated with qpdf and text-extracted (title, wind, flights, attribution) with palette-PNG,
+  RGB/RGBA-PNG and JPEG basemap tiles and with QGIS-rendered backgrounds; wind entered in knots converts
+  exactly to m/s for planning and back when the unit is switched.
 - Not yet flown on real aircraft: run a short test mission (or ArduPilot SITL) before production work.
 
 ## Development
@@ -437,9 +449,9 @@ qgis/drone_mission_planner/  QGIS plugin (UI)
 arcgis/DroneMissionPlanner/  ArcGIS Pro Python toolbox
 tools/build.py             copies the engine into both plugins and writes dist/*.zip
 tests/                     test scripts, a headless QGIS iface, an arcpy stand-in, sample DEM/CAD data
-docs/examples/             example field briefs (open in a browser)
+docs/examples/             example mission reports (PDF) and field briefs (HTML)
 docs/screenshots/          README images (tools/make_*_screenshots.py)
-docs/releases/             release notes
+docs/releases/             release notes (v1.7.0, v1.8.0)
 ```
 
 ```

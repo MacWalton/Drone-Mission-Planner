@@ -76,6 +76,12 @@ print("  current map, nothing visible -> OSM tiles", len(urls), "tile.openstreet
 iface.mapCanvas().setLayers(vis)
 d.brief_bg.setCurrentIndex(d.brief_bg.findData("none")); d.export(); h2 = open(os.path.join(out, seen["default"])).read()
 print("  untick background -> no image:", "data:image" not in h2, "| %d KB" % (len(h2) // 1024))
+d.brief_bg.setCurrentIndex(d.brief_bg.findData("canvas")); d.fmt_cb.setCurrentIndex(d.fmt_cb.findData("brief_pdf")); d.export()
+pdf = os.path.join(out, seen["default"]); pd = open(pdf, "rb").read()
+print("  PDF report:", seen["default"], "| %d KB" % (len(pd) // 1024), "| valid:", pd[:5] == b"%PDF-" and pd.rstrip().endswith(b"%%EOF"), "| images:", pd.count(b"/Subtype /Image"))
+assert seen["default"].endswith(".pdf") and pd.count(b"/Subtype /Image") >= 1
+d.wind.setValue(15); d.wind_unit_cb.setCurrentIndex(d.wind_unit_cb.findData("m/s")); w_ms = d.wind.value(); d.wind_unit_cb.setCurrentIndex(d.wind_unit_cb.findData("kn"))
+print("  wind unit switch kn -> m/s -> kn:", w_ms, "->", d.wind.value(), "| report:", [l for l in d.report.toPlainText().splitlines() if l.startswith("Wind")])
 d.fmt_cb.setCurrentIndex(d.fmt_cb.findData("dji_kmz")); d.export(); print("  kmz default:", seen["default"], "->", sorted(x for x in os.listdir(out) if x.endswith(".kmz"))[:2])
 pl.unload()
 

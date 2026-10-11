@@ -23,6 +23,7 @@ import time
 import uuid
 import zipfile
 from xml.sax.saxutils import escape
+from . import units
 
 FORMATS = {
     "dji_kmz": ("DJI WPML (.kmz)", ".kmz"),
@@ -33,6 +34,7 @@ FORMATS = {
     "geojson": ("GeoJSON (.geojson)", ".geojson"),
     "csv": ("Waypoint CSV (.csv)", ".csv"),
     "brief": ("Field brief & battery plan (.html)", ".html"),
+    "brief_pdf": ("Mission report / field brief (.pdf)", ".pdf"),
 }
 
 DEFAULT_FORMAT_FOR_PLATFORM = {
@@ -75,8 +77,9 @@ def export(mission, fmt, path, to_wgs84, per_flight=True, **kw):
         "dji_kmz": write_dji_kmz, "qgc_plan": write_qgc_plan,
         "mp_waypoints": write_mp_waypoints, "litchi_csv": write_litchi_csv,
         "kml": write_kml, "geojson": write_geojson, "csv": write_csv, "brief": write_brief,
+        "brief_pdf": write_brief_pdf,
     }[fmt]
-    if fmt in ("kml", "geojson", "brief"):
+    if fmt in ("kml", "geojson", "brief", "brief_pdf"):
         writer(mission, path, to_wgs84, **kw)
         return [path]
     out = []
@@ -549,36 +552,36 @@ def write_csv(mission, path, to_wgs84, flight_index=None, **_):
 
 
 # -------------------------------------------------------------- field brief
-def write_brief(mission, path, to_wgs84, background=None, kp_interval=None, **_):
-    """Printable one-page field sheet: summary, stations, battery schedule."""
+FORMATS_BRIEF = ("brief", "brief_pdf")
+
+
+def brief_content(mission, to_wgs84, path=None):
+    """Everything the field brief / mission report shows, as plain text (shared by the
+    HTML and PDF writers)."""
     from .logistics import clock
+    from .units import fmt as _fmt, mass_fmt as _mfmt
     m = mission
     sc = m.schedule
     lp = sc.params if sc else None
-    esc = escape
-    st_rows = []
+    hu = getattr(m.params, "height_unit", "m")
+    mu = getattr(m.params, "mass_unit", "kg")
+    stations = []
     for st in m.stations + ([m.landing] if tuple(m.landing) not in [tuple(s) for s in m.stations] else []):
         lo, la = to_wgs84(*st)
         n = sum(1 for f in m.flights if tuple(f.station_start) == tuple(st))
-        st_rows.append("<tr><td><b>%s</b></td><td>%.6f, %.6f</td><td>%d</td></tr>" % (m.label(st), la, lo, n))
-    fl_rows = []
+        stations.append([m.label(st), "%.6f, %.6f" % (la, lo), "%d" % n])
+    flights = []
     srow = {r.flight: r for r in (sc.rows if sc else [])}
     for f in m.flights:
         r = srow.get(f.index + 1)
-        kp = ("%.2f&ndash;%.2f" % (f.chainage[0] / 1000, f.chainage[1] / 1000)) if f.chainage else ""
-        fl_rows.append(
-            "<tr><td>%d</td><td>%s &rarr; %s</td><td>%s</td><td>%s</td><td>%s</td><td>%.1f</td>"
-            "<td>%.0f%%</td><td>%d</td><td>%s</td><td>%s</td><td>&#9744;</td></tr>"
-            % (f.index + 1, m.label(f.station_start), m.label(f.station_end),
-               r.battery_set if r else "", clock(lp.start_time_min + r.start_min) if r else "",
-               clock(lp.start_time_min + r.end_min) if r else "", f.duration_s / 60,
-               f.battery_fraction * 100, f.photos, kp,
-               esc(("battery change mid-line. " if f.ends_midline else "") + (r.note if r else ""))))
-    warn = "".join("<li>%s</li>" % esc(w) for w in m.warnings)
+        kp = ("%.2f\u2013%.2f" % (f.chainage[0] / 1000, f.chainage[1] / 1000)) if f.chainage else ""
+        flights.append(["%d" % (f.index + 1), "%s \u2192 %s" % (m.label(f.station_start), m.label(f.station_end)),
+                        "%s" % (r.battery_set if r else ""),
+                        clock(lp.start_time_min + r.start_min) if r else "",
+                        clock(lp.start_time_min + r.end_min) if r else "", "%.1f" % (f.duration_s / 60),
+                        "%.0f%%" % (f.battery_fraction * 100), "%d" % f.photos, kp,
+                        (("battery change mid-line. " if f.ends_midline else "") + (r.note if r else "")).strip()])
     h, mm = divmod(int(m.total_time_s // 60), 60)
-    from .units import fmt as _fmt, mass_fmt as _mfmt
-    hu = getattr(m.params, "height_unit", "m")
-    mu = getattr(m.params, "mass_unit", "kg")
     summary = [("Aircraft", m.drone.name), ("Mission", m.params.mission_type),
                ("Area", "%.2f ha" % (m.area_m2 / 1e4)), ("Height", _fmt(m.height_m, hu, 0, True)),
                ("Return-to-home height", _fmt(m.rth_height_m, hu, 0, True)),
@@ -587,19 +590,77 @@ def write_brief(mission, path, to_wgs84, background=None, kp_interval=None, **_)
                ("Photos", "%d" % m.photos), ("Flights", "%d" % len(m.flights)),
                ("Flight time", "%dh %02dm" % (h, mm)),
                ("Usable / battery", "%.1f min" % m.endurance["usable_minutes_still_air"]),
-               ("Wind", "%.1f m/s from %.0f&deg;" % (m.conditions.wind_speed_ms, m.conditions.wind_from_deg)),
-               ("Temp / payload", "%.0f &deg;C / %s" % (m.conditions.temperature_c,
-                                                         _mfmt(m.conditions.total_payload_kg, mu))),
+               ("Wind", "%s from %.0f\u00b0" % (units.wind_fmt(m.conditions.wind_speed_ms,
+                                                               getattr(m.conditions, "wind_unit", "kn")),
+                                                m.conditions.wind_from_deg)),
+               ("Temp / payload", "%.0f \u00b0C / %s" % (m.conditions.temperature_c,
+                                                          _mfmt(m.conditions.total_payload_kg, mu))),
                ("Accessory power", "%.0f W" % m.conditions.accessory_power_w)]
     if m.centreline:
         summary.insert(3, ("Route", "%.2f km, %d sections" % (sum(
             dist_m(a, b) for a, b in zip(m.centreline[:-1], m.centreline[1:])) / 1000, len(m.sections))))
     if sc:
-        summary += [("On site", "%s &ndash; %s (%.1f h)" % (clock(lp.start_time_min),
-                                                        clock(lp.start_time_min + sc.total_min), sc.total_min / 60)),
+        summary += [("On site", "%s \u2013 %s (%.1f h)" % (clock(lp.start_time_min),
+                                                         clock(lp.start_time_min + sc.total_min), sc.total_min / 60)),
                     ("Battery sets", "%d (recommended %d)" % (lp.battery_sets, sc.recommended_sets)),
                     ("Charge waiting", "%.0f min" % sc.waiting_min)]
-    cards = "".join("<div class=c><span>%s</span><b>%s</b></div>" % kv for kv in summary)
+    payload = None
+    c = m.conditions
+    if c.items or c.payload_kg:
+        rows = [[i.name, _mfmt(i.mass_kg, mu), ("%.0f W" % i.power_w) if i.power_w else "-"] for i in c.items]
+        if c.payload_kg:
+            rows.append(["Other (unlisted)", _mfmt(c.payload_kg, mu), "-"])
+        e = m.endurance
+        payload = {"rows": rows, "total": ["Total", _mfmt(c.total_payload_kg, mu), "%.0f W" % c.accessory_power_w],
+                   "note": "Take-off mass %.2f kg (limit %.2f kg payload). Usable endurance %.1f min per battery; "
+                           "%.1f min without accessory power." % (e["take_off_mass_kg"], m.drone.max_payload_kg,
+                                                                   e["usable_minutes_still_air"],
+                                                                   e.get("minutes_without_accessories", 0))}
+    terrain = None
+    rep = getattr(m, "terrain", None)
+    if rep is not None:
+        rows = [["Low clearance" if i.kind == "low" else "Obstacle" if i.kind == "obstacle" else "Above height limit",
+                 "%d" % i.flight, ("%.3f" % (i.kp / 1000)) if i.kp is not None else "", "%.0f m" % i.value_m,
+                 "%.0f" % i.ground_m, "%.0f" % i.alt_amsl] for i in rep.issues[:40]]
+        terrain = {"text": rep.text(hu), "rows": rows}
+    return {"title": mission_title(m, path), "sub": "%s, %s" % (m.drone.name, time.strftime("%d %b %Y")),
+            "summary": summary, "stations": stations, "flights": flights, "payload": payload,
+            "terrain": terrain, "warnings": list(m.warnings),
+            "check": "Check airspace, NOTAMs, weather and the mission preview in the flight app before each flight."}
+
+
+STATION_HEAD = ["Station", "Lat, Lon (WGS84)", "Flights launched"]
+FLIGHT_HEAD = ["#", "Launch \u2192 land", "Set", "Start", "End", "Min", "Battery", "Photos", "KP (km)", "Notes", "Done"]
+TERRAIN_HEAD = ["Issue", "Flight", "KP (km)", "Clearance / AGL", "Ground m AMSL", "Aircraft m AMSL"]
+
+
+def write_brief(mission, path, to_wgs84, background=None, kp_interval=None, **_):
+    """Printable field sheet (HTML): summary, map, stations, battery schedule, checks."""
+    m = mission
+    esc = escape
+    d = brief_content(m, to_wgs84, path)
+    tr = lambda cells, tag="td": "<tr>%s</tr>" % "".join("<%s>%s</%s>" % (tag, esc(c), tag) for c in cells)
+    st_rows = "".join("<tr><td><b>%s</b></td><td>%s</td><td>%s</td></tr>" % tuple(esc(c) for c in r)
+                      for r in d["stations"])
+    fl_rows = "".join("<tr>%s<td>&#9744;</td></tr>" % "".join("<td>%s</td>" % esc(c) for c in r)
+                      for r in d["flights"])
+    warn = "".join("<li>%s</li>" % esc(w) for w in d["warnings"])
+    cards = "".join("<div class=c><span>%s</span><b>%s</b></div>" % (esc(k), esc(v)) for k, v in d["summary"])
+    payload = ""
+    if d["payload"]:
+        p = d["payload"]
+        payload = ("<h2>Payload</h2><table>%s%s%s</table><div style='color:#6b7280;margin-top:4px'>%s</div>"
+                   % (tr(["Item", "Weight", "Power"], "th"), "".join(tr(r) for r in p["rows"]),
+                      tr(p["total"], "th"), esc(p["note"])))
+    terrain = ""
+    if d["terrain"]:
+        from .terrain import svg_profile
+        t = d["terrain"]
+        table = ("<table>%s%s</table>" % (tr(TERRAIN_HEAD, "th"), "".join(tr(r) for r in t["rows"]))) if t["rows"] else ""
+        svg = svg_profile(m.profile, unit=getattr(m.params, "height_unit", "m")) if getattr(m, "profile", None) else ""
+        terrain = ("<h2>Terrain (DEM)</h2><div style='font-family:monospace;font-size:12px'>%s</div>%s%s"
+                   % (esc(t["text"]).replace("\n", "<br>"), table,
+                      ("<div style='margin-top:8px'>%s</div>" % svg) if svg else ""))
     html = """<!doctype html><html><head><meta charset="utf-8"><title>Field brief - %(name)s</title>
 <style>
 h2.map{break-before:auto}svg{break-inside:avoid}
@@ -615,64 +676,27 @@ th{background:#ecfeff}ul{margin:4px 0;padding-left:18px}.w li{color:#b45309}
 <h2>Summary</h2><div class=g>%(cards)s</div>
 <h2>Mission map</h2>%(map)s
 %(payload)s
-<h2>Launch stations</h2><table><tr><th>Station</th><th>Lat, Lon (WGS84)</th><th>Flights launched</th></tr>%(st)s</table>
+<h2>Launch stations</h2><table>%(st_head)s%(st)s</table>
 <h2>Flights &amp; battery plan</h2>
-<table><tr><th>#</th><th>Launch &rarr; land</th><th>Set</th><th>Start</th><th>End</th><th>Min</th><th>Battery</th><th>Photos</th><th>KP (km)</th><th>Notes</th><th>Done</th></tr>%(fl)s</table>
+<table>%(fl_head)s%(fl)s</table>
 %(terrain)s
-<h2>Warnings &amp; checks</h2><ul class=w>%(warn)s<li style="color:#1f2937">Check airspace, NOTAMs, weather and the mission preview in the flight app before each flight.</li></ul>
-</body></html>""" % dict(name=esc(mission_title(mission, path)), cards=cards,
-                         sub=esc("%s, %s" % (m.drone.name, time.strftime("%d %b %Y"))),
-                         map=_brief_map(m, background, kp_interval),
-                         st="".join(st_rows), fl="".join(fl_rows), warn=warn,
-                         terrain=_brief_terrain(m), payload=_brief_payload(m))
+<h2>Warnings &amp; checks</h2><ul class=w>%(warn)s<li style="color:#1f2937">%(check)s</li></ul>
+</body></html>""" % dict(name=esc(d["title"]), cards=cards, sub=esc(d["sub"]),
+                         map=_brief_map(m, background, kp_interval), st_head=tr(STATION_HEAD, "th"),
+                         st=st_rows, fl_head=tr(FLIGHT_HEAD, "th"), fl=fl_rows, warn=warn,
+                         terrain=terrain, payload=payload, check=esc(d["check"]))
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(html)
 
 
+def write_brief_pdf(mission, path, to_wgs84, background=None, kp_interval=None, **_):
+    """The field brief as a PDF (opens anywhere, prints on A4)."""
+    from .pdfreport import write_report_pdf
+    write_report_pdf(mission, path, to_wgs84, background=background, kp_interval=kp_interval)
+
+
 def dist_m(a, b):
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
-
-
-def _brief_terrain(m):
-    rep = getattr(m, "terrain", None)
-    if rep is None:
-        return ""
-    from .terrain import svg_profile
-    lines = escape(rep.text(getattr(m.params, "height_unit", "m"))).replace("\n", "<br>")
-    rows = []
-    for i in rep.issues[:40]:
-        kp = ("%.3f" % (i.kp / 1000)) if i.kp is not None else ""
-        rows.append("<tr><td>%s</td><td>%d</td><td>%s</td><td>%.0f m</td><td>%.0f</td><td>%.0f</td></tr>"
-                    % ("Low clearance" if i.kind == "low" else "Above height limit", i.flight, kp,
-                       i.value_m, i.ground_m, i.alt_amsl))
-    table = ("<table><tr><th>Issue</th><th>Flight</th><th>KP (km)</th><th>Clearance / AGL</th>"
-             "<th>Ground m AMSL</th><th>Aircraft m AMSL</th></tr>%s</table>" % "".join(rows)) if rows else ""
-    svg = svg_profile(m.profile, unit=getattr(m.params, "height_unit", "m")) if getattr(m, "profile", None) else ""
-    return ("<h2>Terrain (DEM)</h2><div style='font-family:monospace;font-size:12px'>%s</div>%s%s"
-            % (lines, table, ("<div style='margin-top:8px'>%s</div>" % svg) if svg else ""))
-
-
-def _brief_payload(m):
-    from .units import mass_fmt
-    c = m.conditions
-    items = c.items
-    if not items and not c.payload_kg:
-        return ""
-    mu = getattr(m.params, "mass_unit", "kg")
-    rows = "".join("<tr><td>%s</td><td>%s</td><td>%s</td></tr>"
-                   % (escape(i.name), mass_fmt(i.mass_kg, mu), ("%.0f W" % i.power_w) if i.power_w else "-")
-                   for i in items)
-    if c.payload_kg:
-        rows += "<tr><td>Other (unlisted)</td><td>%s</td><td>-</td></tr>" % mass_fmt(c.payload_kg, mu)
-    e = m.endurance
-    rows += ("<tr><th>Total</th><th>%s</th><th>%.0f W</th></tr>" % (mass_fmt(c.total_payload_kg, mu),
-                                                                  c.accessory_power_w))
-    note = ("Take-off mass %.2f kg (limit %.2f kg payload). Usable endurance %.1f min per battery; "
-            "%.1f min without accessory power." % (e["take_off_mass_kg"], m.drone.max_payload_kg,
-                                                    e["usable_minutes_still_air"],
-                                                    e.get("minutes_without_accessories", 0)))
-    return ("<h2>Payload</h2><table><tr><th>Item</th><th>Weight</th><th>Power</th></tr>%s</table>"
-            "<div style='color:#6b7280;margin-top:4px'>%s</div>" % (rows, note))
 
 
 def mission_title(mission, path=None):

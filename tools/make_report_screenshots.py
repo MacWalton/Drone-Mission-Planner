@@ -24,7 +24,7 @@ x0, y0 = 381000, 6426000
 
 
 def area_brief():
-    d = get_drone("DJI Mavic 3 Enterprise")
+    d = get_drone("DJI Matrice 4E")
     blk = [[(x0, y0), (x0 + 1500, y0), (x0 + 1500, y0 + 700), (x0 + 1100, y0 + 1000), (x0, y0 + 1000)]]
 
     def ground(x, y):                                             # gentle ridge rising to the east
@@ -89,8 +89,17 @@ if __name__ == "__main__":
     os.makedirs(SHOTS, exist_ok=True)
     a = os.path.join(EX, "sample_area_brief.html")
     r = os.path.join(EX, "sample_route_brief.html")
-    exporters.export(area_brief(), "brief", a, to84)
-    exporters.export(route_brief(), "brief", r, to84, kp_interval=1000)
+    am, rm = area_brief(), route_brief()
+    exporters.export(am, "brief", a, to84)
+    exporters.export(rm, "brief", r, to84, kp_interval=1000)
+    ap = os.path.join(EX, "sample_area_report.pdf")
+    exporters.export(am, "brief_pdf", ap, to84)
+    exporters.export(rm, "brief_pdf", os.path.join(EX, "sample_route_report.pdf"), to84, kp_interval=1000)
+    import shutil
+    import subprocess
+    if shutil.which("pdftoppm"):
+        subprocess.run(["pdftoppm", "-r", "110", "-png", "-f", "1", "-l", "1", "-singlefile", ap,
+                        os.path.join(SHOTS, "report_pdf_page1")], check=True)
     shoot(a, "report_area", [("summary", "body", "h2:has-text('Mission map')"),
                              ("map", "h2:has-text('Mission map')", "h2:has-text('Launch stations')"),
                              ("flights", "h2:has-text('Launch stations')", "h2:has-text('Terrain')"),

@@ -56,6 +56,7 @@ class Conditions:
     reserve_pct: float = 25.0
     battery_health_pct: float = 100.0
     payload_items: list = field(default_factory=list)   # PayloadItem / dict / tuple
+    wind_unit: str = "kn"            # display only: kn | m/s | km/h (wind_speed_ms is always m/s)
 
     @property
     def items(self):
@@ -112,9 +113,11 @@ class EnduranceModel:
         if self.accessory_w > 0 and drone.battery_wh <= 0:
             self.warnings.append("Accessory power is ignored: set the aircraft's battery capacity (Wh).")
         if conditions.wind_speed_ms > drone.max_wind_ms:
+            from .units import wind_fmt
+            u = getattr(conditions, "wind_unit", "kn")
             self.warnings.append(
-                "Wind %.1f m/s exceeds the aircraft's %.1f m/s wind resistance."
-                % (conditions.wind_speed_ms, drone.max_wind_ms))
+                "Wind %s exceeds the aircraft's %s wind resistance."
+                % (wind_fmt(conditions.wind_speed_ms, u), wind_fmt(drone.max_wind_ms, u)))
         if conditions.temperature_c < 5:
             self.warnings.append("Cold batteries: pre-warm packs to 20 C+ before take-off.")
 

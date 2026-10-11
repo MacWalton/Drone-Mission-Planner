@@ -213,6 +213,9 @@ class Mission:
             "Photo interval    : %.1f m" % self.trigger_m,
             "Line heading      : %.1f deg" % self.heading_deg,
             "Speed             : %.1f m/s" % self.speed_ms,
+            "Wind              : %s from %.0f deg, %.0f C" % (
+                U.wind_fmt(self.conditions.wind_speed_ms, getattr(self.conditions, "wind_unit", "kn")),
+                self.conditions.wind_from_deg, self.conditions.temperature_c),
             "Photo trigger     : %s" % self.trigger_text(),
             "Photos (approx.)  : %d" % self.photos,
             "Survey legs       : %d" % len(self.lines),

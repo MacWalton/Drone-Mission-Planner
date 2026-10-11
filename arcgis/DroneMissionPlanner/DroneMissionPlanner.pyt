@@ -40,6 +40,7 @@ TRIGGERS = {"Distance - camera fires every N m (autopilots, Pilot 2, Litchi)": "
             "Timed interval - DJI Fly / Mini series": "timed",
             "Stop & shoot - hover at every photo point": "stop"}
 TRIGGER_LABELS = {v: k for k, v in TRIGGERS.items()}
+WIND_UNITS = {"Knots": "kn", "m/s": "m/s", "km/h": "km/h"}
 BASEMAPS = ["Current map basemap", "OpenStreetMap", "Esri World Imagery", "Esri World Topographic", "None"]
 SHUTTERS = ["1/500", "1/800", "1/1000", "1/1600", "1/2000", "1/3200"]
 
@@ -457,6 +458,8 @@ def _drone_from_params(params):
           "max_wind": ("drone", "max_wind_ms"), "battery_wh": ("drone", "battery_wh")}
     for pname, (obj, attr) in ov.items():
         v = _val(params, pname)
+        if v is not None and pname == "max_wind":
+            v = core.units.wind_to_ms(v, _wunit(params))
         if v is not None:
             setattr(c if obj == "camera" else d, attr,
                     int(v) if attr.endswith("_px") else float(v))
@@ -478,9 +481,30 @@ def _hm(params, name, default=None):
     return None if v is None else core.units.to_m(float(v), _hunit(params))
 
 
+def _wunit(params):
+    """'kn', 'm/s' or 'km/h' from the Wind speed unit parameter (absent = knots)."""
+    p = params.get("wind_unit")
+    return WIND_UNITS.get(p.valueAsText if p is not None else "Knots", "kn")
+
+
+def _convert_wind_on_switch(tool, p):
+    """When the wind unit is changed, convert the wind numbers already entered."""
+    try:
+        u = _wunit(p)
+        prev = getattr(tool, "_last_wunit", None)
+        if prev and prev != u and p["wind_unit"].altered:
+            for n in ("wind", "max_wind"):
+                if n in p and p[n].value is not None:
+                    p[n].value = round(core.units.wind_from_ms(core.units.wind_to_ms(float(p[n].value), prev), u), 1)
+        tool._last_wunit = u
+    except Exception:
+        pass
+
+
 def _conditions_from_params(params):
     return core.Conditions(
-        wind_speed_ms=float(_val(params, "wind", 0)), wind_from_deg=float(_val(params, "wind_dir", 0)),
+        wind_speed_ms=core.units.wind_to_ms(_val(params, "wind", 0), _wunit(params)),
+        wind_unit=_wunit(params), wind_from_deg=float(_val(params, "wind_dir", 0)),
         temperature_c=float(_val(params, "temp", 15)), site_elevation_m=_hm(params, "elev", 0),
         payload_kg=_payload_from_params(params)[1], payload_items=_payload_from_params(params)[0],
         reserve_pct=float(_val(params, "reserve", 25)),
@@ -502,7 +526,7 @@ def _aircraft_params():
         _param("max_payload", "Maximum payload (kg)", "GPDouble", "Optional", category=cat),
         _param("rated_time", "Rated flight time (min)", "GPDouble", "Optional", category=cat),
         _param("max_speed", "Maximum speed (m/s)", "GPDouble", "Optional", category=cat),
-        _param("max_wind", "Maximum wind (m/s)", "GPDouble", "Optional", category=cat),
+        _param("max_wind", "Maximum wind (wind speed unit)", "GPDouble", "Optional", category=cat),
         _param("battery_wh", "Battery capacity per flight (Wh, all packs)", "GPDouble", "Optional",
                category=cat),
         _param("dji_enum", "DJI WPML enum 'drone,payload' (e.g. 77,66)", "GPString", "Optional",
@@ -571,7 +595,9 @@ def _dji_template_param(cat):
 def _conditions_params():
     cat = "Conditions (flight-time optimisation)"
     return [
-        _param("wind", "Wind speed (m/s)", "GPDouble", value=0.0, category=cat),
+        _param("wind_unit", "Wind speed unit", "GPString", values=list(WIND_UNITS), value="Knots",
+               category=cat),
+        _param("wind", "Wind speed (wind speed unit)", "GPDouble", value=0.0, category=cat),
         _param("wind_dir", "Wind direction - blowing FROM (deg)", "GPDouble", value=0.0, category=cat),
         _param("temp", "Air temperature (C)", "GPDouble", value=20.0, category=cat),
         _param("elev", "Take-off elevation above sea level (height units)", "GPDouble", value=0.0,
@@ -595,7 +621,8 @@ def _update_aircraft_defaults(params):
                         ("img_h", c.image_height_px), ("interval", c.min_trigger_interval_s),
                         ("mass", d.empty_mass_kg), ("max_payload", d.max_payload_kg),
                         ("rated_time", d.rated_flight_time_min), ("max_speed", d.max_speed_ms),
-                        ("max_wind", d.max_wind_ms), ("battery_wh", d.battery_wh),
+                        ("max_wind", round(core.units.wind_from_ms(d.max_wind_ms, _wunit(params)), 1)),
+                        ("battery_wh", d.battery_wh),
                         ("dji_enum", d.drone_enum or None)):
             if name in params:
                 params[name].value = v
@@ -780,6 +807,7 @@ class _MissionTool(object):
             self._last_unit = u
         except Exception:
             pass
+        _convert_wind_on_switch(self, p)
         by_gsd = p["size_mode"].valueAsText.startswith("Ground")
         p["gsd"].enabled, p["height"].enabled = by_gsd, not by_gsd
         try:
@@ -1000,9 +1028,9 @@ class _MissionTool(object):
                 tag = "" if k not in ("csv",) else "_waypoints"
                 path = os.path.join(folder, prefix + tag + ext)
                 kw = {"firmware": p["firmware"].valueAsText.lower()} if k == "qgc_plan" else {}
-                if k == "brief" and self.route:
+                if k in ("brief", "brief_pdf") and self.route:
                     kw["kp_interval"] = float(_val(p, "kp_interval", 0)) or None
-                if k == "brief":
+                if k in ("brief", "brief_pdf"):
                     kw["background"] = _brief_basemap(p["brief_basemap"].valueAsText, work_sr)
                 if k == "dji_kmz" and p["dji_template"].value is not None:
                     kw["template"] = p["dji_template"].valueAsText
@@ -1212,7 +1240,9 @@ class FlightTimeCalculator(object):
         return ps
 
     def updateParameters(self, parameters):
-        _update_aircraft_defaults(_by_name(parameters))
+        p = _by_name(parameters)
+        _convert_wind_on_switch(self, p)
+        _update_aircraft_defaults(p)
 
     def updateMessages(self, parameters):
         _payload_messages(_by_name(parameters))
@@ -1252,7 +1282,10 @@ class FlightTimeCalculator(object):
              % (spacing * v * usable * 60 * 0.85 / 1e4))
         _msg("")
         _msg("Wind sensitivity (same heading, wind along the lines):")
-        for w in [0, 3, 6, 9, 12]:
+        wu = _wunit(p)
+        steps = {"kn": [0, 5, 10, 15, 20, 25], "m/s": [0, 3, 6, 9, 12], "km/h": [0, 10, 20, 30, 40, 50]}[wu]
+        for wv in steps:
+            w = core.units.wind_to_ms(wv, wu)
             cc = core.Conditions(**dict(c.__dict__, wind_speed_ms=w,
                                         wind_from_deg=float(_val(p, "heading", 0))))
             mm = core.EnduranceModel(d, cc, h)
@@ -1261,7 +1294,7 @@ class FlightTimeCalculator(object):
             f2 = mm.leg((0, 0), (-math.sin(r) * 1000, -math.cos(r) * 1000), v)[1]
             km = 2.0 / (f1 + f2) if f1 + f2 > 0 else 0
             flag = "  (above aircraft limit)" if w > d.max_wind_ms else ""
-            _msg("  wind %2d m/s : %.1f km of survey line per battery%s" % (w, km, flag))
+            _msg("  wind %2d %-4s: %.1f km of survey line per battery%s" % (wv, wu, km, flag))
         for wmsg in model.warnings:
             _warn(wmsg)
 
