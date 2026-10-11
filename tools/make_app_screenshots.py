@@ -204,4 +204,70 @@ compose(r_img, p_img.copy(0, 0, p_img.width(), 760),
         "Route / corridor mapping - auto-placed launch stations and chainage (QGIS)",
         os.path.join(OUT, "qgis_route_mission.png"))
 print(d.report.toPlainText().splitlines()[:3])
+
+# ------------------------------------------------------------- footprints over terrain (DEM)
+from qgis.core import (QgsHillshadeRenderer, QgsGraduatedSymbolRenderer, QgsRendererRange, QgsFillSymbol,
+                       QgsLineSymbol)
+dem = QgsRasterLayer(os.path.join(ROOT, "tests", "qgis_data", "dem.tif"), "Terrain (DEM)")
+from qgis.core import QgsSingleBandGrayRenderer, QgsContrastEnhancement
+gr = QgsSingleBandGrayRenderer(dem.dataProvider(), 1)
+ce = QgsContrastEnhancement(dem.dataProvider().dataType(1))
+ce.setContrastEnhancementAlgorithm(QgsContrastEnhancement.ContrastEnhancementAlgorithm.StretchToMinimumMaximum
+                                   if hasattr(QgsContrastEnhancement, "ContrastEnhancementAlgorithm")
+                                   else QgsContrastEnhancement.StretchToMinimumMaximum)
+ce.setMinimumValue(0)
+ce.setMaximumValue(120)
+gr.setContrastEnhancement(ce)
+dem.setRenderer(gr)
+dem.setOpacity(0.55)
+QgsProject.instance().addMapLayer(dem)
+d.range_cb.setChecked(False)
+d.type_cb.setCurrentIndex(0)
+d.name_le.setText("Rising ground - footprints vs terrain")
+d.dem_cb.setLayer(dem)
+d.gsd.setValue(3.0)
+ring = [(115.7456, -32.3150), (115.7522, -32.3150), (115.7522, -32.3045), (115.7456, -32.3045)]
+d.set_boundary(QgsGeometry.fromPolygonXY([[xf.transform(P(*q)) for q in ring]]), c3857)
+pump()
+d._picked("takeoff", xf.transform(P(115.7454, -32.3156)))
+pump(2000)
+fl = L.find(L.FOOTPRINTS)
+vals = [f["gsd_cm"] for f in fl.getFeatures()]
+lo, hi = min(vals), max(vals)
+cols = ["44,123,182", "171,217,233", "255,255,191", "253,174,97", "215,25,28"]
+ranges = []
+for i, c in enumerate(cols):
+    a, b = lo + (hi - lo) * i / 5, lo + (hi - lo) * (i + 1) / 5
+    sym = QgsFillSymbol.createSimple({"style": "no", "outline_color": c + ",230", "outline_width": "0.35"})
+    ranges.append(QgsRendererRange(a, b + 1e-9, sym, "%.2f - %.2f cm/px" % (a, b)))
+fl.setRenderer(QgsGraduatedSymbolRenderer("gsd_cm", ranges))
+print("footprints over terrain: %d, GSD %.2f - %.2f cm" % (len(vals), lo, hi))
+ms = QgsMapSettings()
+ms.setLayers([L.find(n) for n in (L.SITE, L.BOUNDARY)] + [fl, dem])
+ms.setDestinationCrs(c3857)
+ms.setExtent(xf.transformBoundingBox(QgsRectangle(115.7438, -32.3172, 115.7540, -32.3028)))
+ms.setOutputSize(QSize(1100, 900))
+ms.setOutputDpi(110)
+ms.setBackgroundColor(PAPER)
+job = QgsMapRendererParallelJob(ms)
+job.start()
+job.waitForFinished()
+img = job.renderedImage()
+p_ = QPainter(img)                                   # legend
+f_ = QFont()
+f_.setPointSize(10)
+p_.setFont(f_)
+p_.fillRect(14, 14, 250, 26 + 22 * 5, QColor(255, 255, 255, 225))
+p_.setPen(QColor(30, 30, 30))
+p_.drawText(24, 34, "Footprint GSD (flat-height plan)")
+for i, (c, r) in enumerate(zip(cols, ranges)):
+    rgb = [int(v) for v in c.split(",")]
+    p_.setPen(QPen(QColor(*rgb), 3))
+    p_.drawRect(24, 46 + 22 * i, 22, 12)
+    p_.setPen(QColor(30, 30, 30))
+    p_.drawText(56, 57 + 22 * i, r.label())
+p_.end()
+compose(img, QImage(0, 0, QImage.Format.Format_RGB32),
+        "Image footprints over rising ground (DEM, darker = lower): footprints shrink and GSD gets finer uphill",
+        os.path.join(OUT, "qgis_footprints_terrain.png"))
 pl.unload()

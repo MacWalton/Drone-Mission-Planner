@@ -110,6 +110,11 @@ are easy to check.
 
 ![Image footprints in QGIS](docs/screenshots/qgis_footprints.png)
 
+With a DEM, a flat-height plan over rising ground: footprints shrink and the GSD gets finer uphill (layer
+styled by `gsd_cm`).
+
+![Image footprints over terrain](docs/screenshots/qgis_footprints_terrain.png)
+
 ## Big jobs: battery changes & launch stations
 
 Large areas and long routes need many batteries. The planner builds the whole day, not just the flight lines:
