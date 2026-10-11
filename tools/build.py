@@ -27,7 +27,8 @@ def bundle():
         d = os.path.join(ROOT, parent, name)
         shutil.rmtree(os.path.join(d, "dronemapper_core"), ignore_errors=True)
         shutil.copytree(core, os.path.join(d, "dronemapper_core"), ignore=_ignore)
-        shutil.copy2(os.path.join(ROOT, "README.md"), os.path.join(d, "README.md"))
+        for f in ("README.md", "LICENSE"):
+            shutil.copy2(os.path.join(ROOT, f), os.path.join(d, f))
 
 
 def package():
