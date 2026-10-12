@@ -2,9 +2,15 @@ name: release
 # Push a version tag (e.g. git tag v1.12.0 && git push origin v1.12.0) to build both
 # plugin zips, run the engine tests and publish a GitHub release with the notes from
 # docs/releases/<tag>.md.
+# Or: GitHub > Actions > release > Run workflow (creates the tag from the plugin's version).
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (blank = version in metadata.txt)"
+        required: false
 permissions:
   contents: write
 jobs:
@@ -16,9 +22,18 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pyproj
+      - name: Work out the tag
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            V="${{ github.event.inputs.version }}"
+            [ -n "$V" ] || V=$(grep '^version=' qgis/drone_mission_planner/metadata.txt | cut -d= -f2)
+            echo "RELEASE_TAG=v${V#v}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+          fi
       - name: Version check (tag = plugin metadata = engine)
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
+          TAG="${RELEASE_TAG#v}"
           META=$(grep '^version=' qgis/drone_mission_planner/metadata.txt | cut -d= -f2)
           CORE=$(python -c "import dronemapper_core as c; print(c.__version__)")
           echo "tag $TAG  metadata $META  core $CORE"
@@ -35,10 +50,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="$GITHUB_REF_NAME"
+          TAG="$RELEASE_TAG"
           VER="${TAG#v}"
           NOTES="docs/releases/$TAG.md"
           [ -f "$NOTES" ] || { echo "Drone Mission Planner $TAG" > /tmp/notes.md; NOTES=/tmp/notes.md; }
           gh release create "$TAG" dist/drone_mission_planner_qgis.zip dist/DroneMissionPlanner_ArcGISPro.zip \
             --title "Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox (v${VER%.*})" \
-            --notes-file "$NOTES" --verify-tag
+            --notes-file "$NOTES" --target "$GITHUB_SHA"

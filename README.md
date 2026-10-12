@@ -549,7 +549,7 @@ python tests/run_tests.py          # everything, run with QGIS's Python for the 
 ```
 
 **Releasing:** bump `version=` in `qgis/drone_mission_planner/metadata.txt` and `__version__` in
-`dronemapper_core/__init__.py`, add `docs/releases/vX.Y.Z.md`, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
+`dronemapper_core/__init__.py`, add `docs/releases/vX.Y.Z.md`, then either `git tag vX.Y.Z && git push origin vX.Y.Z` or *GitHub ▸ Actions ▸ release ▸ Run workflow*.
 The *release* workflow checks the versions match, runs the engine tests, builds both zips and publishes the
 GitHub release with those notes.
 
