@@ -11,10 +11,10 @@ from .planner import (MissionParams, Mission, plan_mission, AREA, ROUTE, suggest
                       route_layout, prepare_centreline, suggest_area_stations,
                       default_mission_name, safe_filename)
 from .logistics import LogisticsParams, build_schedule, clock
-from . import photogrammetry, geometry, exporters, uploader, logistics, dem, terrain, units, obstacles, basemap, footprints, daylight
+from . import photogrammetry, geometry, exporters, uploader, logistics, dem, terrain, units, obstacles, basemap, footprints, daylight, airspace
 from .obstacles import Obstacle, ObstacleSet
 
-__version__ = "1.10.0"
+__version__ = "1.11.0"
 
 
 def utm_epsg(lon, lat):

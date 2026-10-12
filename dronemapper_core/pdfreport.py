@@ -610,6 +610,13 @@ def _legend(r, mission):
         items.append(("box", colour("#8a8984"), "Obstacle"))
     if getattr(mission, "terrain", None) is not None and mission.terrain.issues:
         items.append(("tri", colour("#d03b3b"), "Terrain / obstacle warning"))
+    asp = getattr(mission, "airspace", None)
+    if asp is not None:
+        from .briefmap import AIRSPACE_COLOURS
+        for cat, lab in (("controlled", "Controlled airspace"), ("restricted", "Restricted / prohibited"),
+                         ("danger", "Danger / military"), ("uncontrolled", "Uncontrolled airspace")):
+            if any(h.airspace.category == cat and h.ring_xy and h.status != "above" for h in asp.hits):
+                items.append(("dash", colour(AIRSPACE_COLOURS[cat]), lab))
     x, size = r.M, 7.5
     r.need(14)
     r.y += 9
@@ -639,7 +646,7 @@ def _legend(r, mission):
 
 
 def write_report_pdf(mission, path, to_wgs84, background=None, kp_interval=None):
-    from .exporters import brief_content, STATION_HEAD, FLIGHT_HEAD, TERRAIN_HEAD, mission_title
+    from .exporters import brief_content, STATION_HEAD, FLIGHT_HEAD, TERRAIN_HEAD, AIRSPACE_HEAD, mission_title
     from .briefmap import svg_map, map_view, section_views
     m = mission
     d = brief_content(m, to_wgs84, path)
@@ -683,6 +690,15 @@ def write_report_pdf(mission, path, to_wgs84, background=None, kp_interval=None)
         r.h2("Payload", 60)
         r.table(["Item", "Weight", "Power"], p["rows"], [5, 3, 2], total=p["total"])
         r.para(p["note"], 7.5, MUTED)
+    if d.get("airspace"):
+        a = d["airspace"]
+        r.h2("Airspace", 40 + 30 * min(len(a["rows"]), 4))
+        r.para(a["summary"], 10, font="F2", col=WARN if not a["summary"].startswith(("Uncontrolled", "No airspace"))
+               else INK)
+        r.y += 3
+        if a["rows"]:
+            r.table(AIRSPACE_HEAD, a["rows"], [1.2, 2.4, 1.6, 2.0, 0.9, 4.5], size=7.5)
+        r.para(a["note"], 7.5, MUTED)
     r.h2("Launch stations", 50)
     r.table(STATION_HEAD, d["stations"], [2, 5, 2.5], bold_first=True)
     r.h2("Flights & battery plan", 60)

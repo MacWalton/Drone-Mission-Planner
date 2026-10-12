@@ -155,3 +155,8 @@ PROGRESS = []
 def SetProgressor(*a): PROGRESS.append(("set", a[1] if len(a) > 1 else ""))
 def SetProgressorPosition(v): PROGRESS.append(("pos", v))
 def ResetProgressor(): PROGRESS.append(("reset",))
+class _Field:
+    def __init__(s, name, type_="String"): s.name = name; s.type = type_
+def ListFields(x):
+    d = INPUTS[x]; keys = list((d.get("attrs") or [{}])[0].keys())
+    return [_Field("OBJECTID", "OID"), _Field("Shape", "Geometry")] + [_Field(k) for k in keys]

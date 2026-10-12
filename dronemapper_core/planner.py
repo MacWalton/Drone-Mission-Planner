@@ -134,6 +134,7 @@ class Mission:
     min_agl_m: float = None
     ground: object = None             # f(x, y) -> m AMSL used for planning (DEM), if any
     daylight: object = None           # daylight.DaylightReport (set by daylight.analyse)
+    airspace: object = None           # airspace.AirspaceReport (set by airspace.check)
 
     @property
     def waypoints(self):
@@ -243,6 +244,9 @@ class Mission:
         if self.daylight is not None:
             lines.append("")
             lines.append(self.daylight.text())
+        if self.airspace is not None:
+            lines.append("")
+            lines.append(self.airspace.text())
         for w in self.warnings:
             lines.append("WARNING: " + w)
         return "\n".join(lines)

@@ -18,6 +18,7 @@ WAYPOINTS = "Waypoints"
 PHOTOS = "Photo centres"
 FOOTPRINT = "Corridor footprint"
 FOOTPRINTS = "Image footprints"
+AIRSPACE = "Airspace"
 CHAINAGE = "Chainage"
 TERRAIN = "Terrain warnings"
 
@@ -63,7 +64,7 @@ def get_or_create(name, geom, crs, fields, style=None):
         if style:
             style(lyr)
         project().addMapLayer(lyr, False)
-        if name == FOOTPRINTS:                 # under the flight lines
+        if name in (FOOTPRINTS, AIRSPACE):     # under the flight lines
             group().addLayer(lyr)
         else:
             group().insertLayer(0, lyr)
@@ -240,4 +241,38 @@ def terrain_layer(crs):
     if lyr.crs() != crs:
         clear(lyr)
         lyr.setCrs(crs)
+    return lyr
+
+
+def _style_airspace(l):
+    cols = {"controlled": "162,28,175", "restricted": "208,59,59", "danger": "234,88,12",
+            "uncontrolled": "100,116,139", "other": "100,116,139"}
+    cats = []
+    for k, label in (("restricted", "Restricted / prohibited"), ("controlled", "Controlled"),
+                     ("danger", "Danger / military"), ("uncontrolled", "Uncontrolled (G/F)"), ("other", "Other")):
+        sym = QgsFillSymbol.createSimple({"color": cols[k] + ",25", "outline_color": cols[k],
+                                          "outline_width": "0.6", "outline_style": "dash"})
+        cats.append(QgsRendererCategory(k, sym, label))
+    l.setRenderer(QgsCategorizedSymbolRenderer("category", cats))
+    s = QgsPalLayerSettings()
+    s.isExpression = True
+    s.fieldName = "\"label\" || ' ' || \"name\" || '\\n' || \"limits\""
+    l.setLabeling(QgsVectorLayerSimpleLabeling(s))
+    l.setLabelsEnabled(True)
+
+
+def airspace_layer(airspaces):
+    """Replace the Airspace layer (WGS84) with the loaded airspaces."""
+    crs = QgsCoordinateReferenceSystem("EPSG:4326")
+    lyr = get_or_create(AIRSPACE, "Polygon", crs,
+                        [("name", T_STR), ("label", T_STR), ("class", T_STR), ("type", T_STR),
+                         ("limits", T_STR), ("category", T_STR), ("source", T_STR)], _style_airspace)
+    clear(lyr)
+    rows = []
+    for a in airspaces:
+        if a.category == "ignore":
+            continue
+        g = QgsGeometry.fromPolygonXY([[QgsPointXY(*p) for p in r] for r in a.rings[:1]])
+        rows.append((g, [a.name, a.label, a.cls, a.kind, a.limits_text, a.category, a.source]))
+    add(lyr, rows)
     return lyr

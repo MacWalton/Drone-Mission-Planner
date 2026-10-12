@@ -637,7 +637,23 @@ def brief_content(mission, to_wgs84, path=None):
     sub = ("%s \u00b7 flight date %s \u00b7 prepared %s" % (m.drone.name, dlr.date.strftime("%a %d %b %Y"),
                                                            time.strftime("%d %b %Y")) if dlr is not None
            else "%s, %s" % (m.drone.name, time.strftime("%d %b %Y")))
-    return {"title": mission_title(m, path), "sub": sub,
+    airspace = None
+    ar = getattr(m, "airspace", None)
+    if ar is not None:
+        summary.insert(1 if dlr is not None else 0, ("Airspace", ar.summary))
+        order = ("inside", "below", "near", "above")
+        rows = []
+        for hh in sorted(ar.hits, key=lambda q: order.index(q.status)):
+            a = hh.airspace
+            rows.append([{"inside": "INSIDE", "below": "Below floor", "near": "Nearby", "above": "Above"}[hh.status],
+                         a.name, a.label, a.limits_text, ", ".join(str(x) for x in hh.flights[:12]) or "-",
+                         hh.message.split(": ", 1)[-1] if hh.status == "inside" else
+                         ("%.0f m from the mission" % hh.min_dist_m if hh.status == "near" else hh.message)])
+        airspace = {"summary": ar.summary, "rows": rows, "sources": ", ".join(ar.sources) or "-",
+                    "note": "Checked against %d airspace(s) from %s along every flight path. Not an authoritative "
+                            "source - confirm with an approved airspace app / authority and check NOTAMs before "
+                            "flight." % (ar.checked, ", ".join(ar.sources) or "-")}
+    return {"title": mission_title(m, path), "sub": sub, "airspace": airspace,
             "summary": summary, "stations": stations, "flights": flights, "payload": payload,
             "terrain": terrain, "warnings": list(m.warnings),
             "check": "Check airspace, NOTAMs, weather and the mission preview in the flight app before each flight."}
@@ -651,6 +667,7 @@ FLIGHT_HEAD = ["#", "Launch \u2192 land", "Set", "Start", "End", "Min", "Battery
 def _dclock(v):
     from .daylight import clock
     return clock(v)
+AIRSPACE_HEAD = ["Status", "Airspace", "Class / type", "Limits", "Flights", "What it means"]
 TERRAIN_HEAD = ["Issue", "Flight", "KP (km)", "Clearance / AGL", "Ground m AMSL", "Aircraft m AMSL"]
 
 
@@ -696,6 +713,7 @@ th{background:#ecfeff}ul{margin:4px 0;padding-left:18px}.w li{color:#b45309}
 <h2>Summary</h2><div class=g>%(cards)s</div>
 <h2>Mission map</h2>%(map)s
 %(payload)s
+%(airspace)s
 <h2>Launch stations</h2><table>%(st_head)s%(st)s</table>
 <h2>Flights &amp; battery plan</h2>
 <table>%(fl_head)s%(fl)s</table>
@@ -704,7 +722,13 @@ th{background:#ecfeff}ul{margin:4px 0;padding-left:18px}.w li{color:#b45309}
 </body></html>""" % dict(name=esc(d["title"]), cards=cards, sub=esc(d["sub"]),
                          map=_brief_map(m, background, kp_interval), st_head=tr(STATION_HEAD, "th"),
                          st=st_rows, fl_head=tr(FLIGHT_HEAD, "th"), fl=fl_rows, warn=warn,
-                         terrain=terrain, payload=payload, check=esc(d["check"]))
+                         terrain=terrain, payload=payload, check=esc(d["check"]),
+                         airspace=(("<h2>Airspace</h2><p><b>%s</b></p><table>%s%s</table><div style='color:#6b7280;"
+                                    "margin-top:4px'>%s</div>" % (esc(d["airspace"]["summary"]),
+                                                                  tr(AIRSPACE_HEAD, "th"),
+                                                                  "".join(tr(r) for r in d["airspace"]["rows"]),
+                                                                  esc(d["airspace"]["note"])))
+                                   if d["airspace"] else ""))
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(html)
 

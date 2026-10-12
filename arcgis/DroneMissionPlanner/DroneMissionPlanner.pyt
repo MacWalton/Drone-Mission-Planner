@@ -41,6 +41,8 @@ TRIGGERS = {"Distance - camera fires every N m (autopilots, Pilot 2, Litchi)": "
             "Stop & shoot - hover at every photo point": "stop"}
 TRIGGER_LABELS = {v: k for k, v in TRIGGERS.items()}
 WIND_UNITS = {"Knots": "kn", "m/s": "m/s", "km/h": "km/h"}
+ASP_SOURCES = ["Off", "Airspace layer", "File (OpenAir / GeoJSON / ED-269)", "Download - FAA (USA)",
+               "Download - openAIP (worldwide, API key)"]
 BASEMAPS = ["Current map basemap", "OpenStreetMap", "Esri World Imagery", "Esri World Topographic", "None"]
 SHUTTERS = ["1/500", "1/800", "1/1000", "1/1600", "1/2000", "1/3200"]
 
@@ -385,6 +387,38 @@ def _download_dem(source, lonlat_pts, buffer_m, out_path):
         _warn("%d tile(s) had no data (sea or not released) and were set to 0 m." % info["missing_tiles"])
     _msg("Elevation data: " + info["attribution"])
     return out_path
+
+
+def _read_airspace(p, bbox84):
+    """(airspaces, sources) from the chosen airspace source, or ([], [])."""
+    src = p["asp_source"].valueAsText or "Off" if "asp_source" in p else "Off"
+    if src == "Off":
+        return [], []
+    if src.startswith("Airspace layer"):
+        fs = p["asp_layer"].valueAsText if p["asp_layer"].value is not None else None
+        if not fs:
+            raise arcpy.ExecuteError("Choose the airspace layer.")
+        names = [f.name for f in arcpy.ListFields(fs) if f.type not in ("Geometry", "OID", "Blob", "Raster")]
+        out = []
+        with arcpy.da.SearchCursor(fs, ["SHAPE@"] + names) as cur:
+            for row in cur:
+                g = row[0]
+                if g is None:
+                    continue
+                g84 = _project(g, WGS84)
+                rings = [part[0] for part in _rings(g84) if part]
+                a = core.airspace.from_attributes(dict(zip(names, row[1:])), rings, os.path.basename(fs))
+                if a is not None and rings:
+                    out.append(a)
+        return out, [os.path.basename(fs)]
+    if src.startswith("File"):
+        f = p["asp_file"].valueAsText
+        if not f:
+            raise arcpy.ExecuteError("Choose the airspace file.")
+        return core.airspace.load_file(f), [os.path.basename(f)]
+    if "FAA" in src:
+        return core.airspace.fetch_faa(bbox84, log=_msg), ["FAA"]
+    return core.airspace.fetch_openaip(bbox84, p["openaip_key"].valueAsText or "", log=_msg), ["openAIP"]
 
 
 def _read_obstacles(p, work_sr, near_pts, pad_m):
@@ -755,6 +789,17 @@ class _MissionTool(object):
                       category=cat),
                _param("tagl", "Maximum height above ground (height units)", "GPDouble", value=120.0,
                       category=cat)]
+        ac = "Airspace check (aeronautical charts data)"
+        al = _param("asp_layer", "Airspace layer (polygons with class / type / limits fields)", "GPFeatureLayer",
+                    "Optional", category=ac, enabled=False)
+        af = _param("asp_file", "Airspace file (OpenAir .txt/.air, GeoJSON, ED-269 .json)", "DEFile", "Optional",
+                    category=ac, enabled=False)
+        af.filter.list = ["txt", "air", "openair", "geojson", "json"]
+        ps += [_param("asp_source", "Airspace source", "GPString", values=ASP_SOURCES, value=ASP_SOURCES[0],
+                      category=ac), al, af,
+               _param("openaip_key", "openAIP API key (free account at openaip.net)", "GPStringHidden", "Optional",
+                      category=ac, enabled=False),
+               _param("asp_near", "Also list airspace within (m)", "GPDouble", value=1000.0, category=ac)]
         oc = "Obstacles (powerlines, buildings, trees)"
         ol = _param("obstacles", "Obstacle layer (points, lines or polygons)", "GPFeatureLayer", "Optional",
                     category=oc)
@@ -800,6 +845,7 @@ class _MissionTool(object):
                                 ("out_chainage", "Chainage markers", "DEFeatureClass"),
                                 ("out_schedule", "Flight & battery schedule", "DETable"),
                                 ("out_terrain", "Terrain warnings", "DEFeatureClass"),
+                                ("out_airspace", "Airspace affecting the mission", "DEFeatureClass"),
                                 ("out_profile", "Route elevation profile", "DETable"),
                                 ("out_dem", "Downloaded DEM", "DERasterDataset")):
             ps.append(_param(n, label, dtype, "Derived", "Output"))
@@ -853,6 +899,10 @@ class _MissionTool(object):
         if "sections" in p:
             p["section_km"].enabled = p["sections"].valueAsText == "Fixed length"
         p["stop_hover"].enabled = TRIGGERS.get(p["photo_trigger"].valueAsText) == "stop"
+        asrc = p["asp_source"].valueAsText or "Off"
+        p["asp_layer"].enabled = asrc.startswith("Airspace layer")
+        p["asp_file"].enabled = asrc.startswith("File")
+        p["openaip_key"].enabled = "openAIP" in asrc
         up = p["mavlink"].value is not None
         p["baud"].enabled = p["upload_flight"].enabled = up or p["device_folder"].value is not None
         return
@@ -1025,6 +1075,22 @@ class _MissionTool(object):
             limit = (_hm(p, "min_agl") - 0.5) if _hm(p, "min_agl") else _hm(p, "tclear", 30)
             core.terrain.analyse(mission, dem, limit, _hm(p, "tagl", 120))
         core.daylight.analyse(mission, _to_wgs84_fn(work_sr), float(_val(p, "min_sun", 30)))
+        if (p["asp_source"].valueAsText or "Off") != "Off":
+            to84a = _to_wgs84_fn(work_sr)
+            ll = [to84a(*q) for q in site_pts]
+            lat_c = sum(q[1] for q in ll) / len(ll)
+            dlat, dlon = 0.09, 0.09 / max(0.2, math.cos(math.radians(lat_c)))
+            bb = (min(q[0] for q in ll) - dlon, min(q[1] for q in ll) - dlat,
+                  max(q[0] for q in ll) + dlon, max(q[1] for q in ll) + dlat)
+            try:
+                asp, srcs = _read_airspace(p, bb)
+            except arcpy.ExecuteError:
+                raise
+            except Exception as e:
+                raise arcpy.ExecuteError("Airspace not loaded: %s" % e)
+            _msg("Airspace: %d loaded from %s" % (len([a for a in asp if a.category != "ignore"]), ", ".join(srcs)))
+            core.airspace.check(mission, asp, to84a, _from_wgs84_fn(work_sr), float(_val(p, "asp_near", 1000)),
+                                sources=srcs)
         for line in mission.report().splitlines():
             (_warn if line.startswith("WARNING") else _msg)(line)
 
@@ -1036,6 +1102,7 @@ class _MissionTool(object):
         out = self._write_outputs(mission, gdb, prefix, work_sr,
                                   float(_val(p, "kp_interval", 0)) if self.route else 0)
         out.update(self._write_terrain(mission, gdb, prefix, work_sr))
+        out.update(self._write_airspace(mission, gdb, prefix))
         for key, path in out.items():
             p[key].value = path
 
@@ -1201,6 +1268,23 @@ class _MissionTool(object):
                                (r.note if r else "")[:250]])
         out["out_schedule"] = tpath
         return out
+
+    @staticmethod
+    def _write_airspace(m, gdb, prefix):
+        rep = getattr(m, "airspace", None)
+        if rep is None or not rep.hits:
+            return {}
+        path = _new_fc(gdb, prefix + "_airspace", "POLYGON", WGS84,
+                       [("status", "TEXT"), ("name", "TEXT"), ("label", "TEXT"), ("limits", "TEXT"),
+                        ("category", "TEXT"), ("flights", "TEXT"), ("message", "TEXT")])
+        with arcpy.da.InsertCursor(path, ["SHAPE@", "status", "name", "label", "limits", "category", "flights",
+                                          "message"]) as cur:
+            for h in rep.hits:
+                a = h.airspace
+                arr = arcpy.Array([arcpy.Array([arcpy.Point(*q) for q in r]) for r in a.rings[:1]])
+                cur.insertRow([arcpy.Polygon(arr, WGS84), h.status, a.name[:250], a.label[:250], a.limits_text,
+                               a.category, ",".join(str(f) for f in h.flights)[:250], h.message[:250]])
+        return {"out_airspace": path}
 
     @staticmethod
     def _write_terrain(m, gdb, prefix, sr):

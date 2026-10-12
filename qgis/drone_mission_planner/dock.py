@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 """Drone Mission Planner dock panel."""
+import math
 import os
 import tempfile
 import traceback
@@ -473,6 +474,55 @@ class MissionDock(QDockWidget):
         f.addRow(self.obs_lbl)
         lay.addWidget(g)
 
+        # ---- Airspace (aeronautical data)
+        g = QgsCollapsibleGroupBox("Airspace check (aeronautical charts data)")
+        f = QFormLayout(g)
+        self.asp_src = QComboBox()
+        for label, key in (("Off", "none"), ("Airspace layer in this project", "layer"),
+                           ("File – OpenAir / GeoJSON / ED-269 UAS zones", "file"),
+                           ("Download – FAA (USA, no key)", "faa"),
+                           ("Download – openAIP (worldwide, free API key)", "openaip")):
+            self.asp_src.addItem(label, key)
+        self.asp_src.setToolTip("Where the airspace comes from. The mission is checked along every flight path, "
+                                "in 3D, against controlled, restricted, danger and other airspace.")
+        f.addRow("Source", self.asp_src)
+        self.asp_layer = QgsMapLayerComboBox()
+        try:
+            self.asp_layer.setFilters(QgsMapLayerProxyModel.Filter.PolygonLayer)
+        except AttributeError:
+            self.asp_layer.setFilters(QgsMapLayerProxyModel.PolygonLayer)
+        self.asp_layer.setAllowEmptyLayer(True)
+        self.asp_layer.setLayer(None)
+        self.asp_layer.setToolTip("Polygon layer of airspace (e.g. Airservices / FAA / national download, openAIP "
+                                  "export). Fields like class, type, name and upper/lower limits are recognised.")
+        f.addRow("Airspace layer", self.asp_layer)
+        row = QHBoxLayout()
+        self.asp_file = QLineEdit(QSettings().value("dmp/airspace_file", ""))
+        self.asp_file.setPlaceholderText("OpenAir .txt/.air, GeoJSON or ED-269 .json")
+        b = QToolButton(); b.setText("…"); b.clicked.connect(self._browse_airspace)
+        row.addWidget(self.asp_file, 1); row.addWidget(b)
+        f.addRow("File", row)
+        self.asp_key = QLineEdit(QSettings().value("dmp/openaip_key", ""))
+        self.asp_key.setEchoMode(QLineEdit.EchoMode.Password if hasattr(QLineEdit, "EchoMode") else QLineEdit.Password)
+        self.asp_key.setPlaceholderText("openAIP API key (free account at openaip.net)")
+        f.addRow("openAIP key", self.asp_key)
+        self.asp_near = dspin(0, 20000, 1000, 0, "m – also list airspace this close", 250)
+        f.addRow("Nearby", self.asp_near)
+        self.asp_btn = QPushButton("Load airspace")
+        self.asp_btn.clicked.connect(self.load_airspace)
+        f.addRow(self.asp_btn)
+        self.asp_lbl = QLabel("Not checked. Choose a source and click Load airspace.")
+        self.asp_lbl.setWordWrap(True)
+        self.asp_lbl.setStyleSheet("color: gray")
+        f.addRow(self.asp_lbl)
+        self._airspaces, self._asp_sources = [], []
+        self.asp_src.currentIndexChanged.connect(self._asp_src_changed)
+        self.asp_layer.layerChanged.connect(lambda *_: self.load_airspace(quiet=True) if self.asp_src.currentData() == "layer" else None)
+        self.asp_near.valueChanged.connect(self._param_changed)
+        g.setCollapsed(True)
+        lay.addWidget(g)
+        self._asp_src_changed()
+
         # ---- Battery changes & field logistics
         g = QgsCollapsibleGroupBox("Battery changes && field schedule")
         f = QFormLayout(g)
@@ -621,6 +671,114 @@ class MissionDock(QDockWidget):
                     guess = fld.name()
                     break
         self.obs_field.setField(guess)
+        self._param_changed()
+
+    # ============================================================ airspace
+    def _asp_src_changed(self, *_):
+        k = self.asp_src.currentData()
+        self.asp_layer.setEnabled(k == "layer")
+        self.asp_file.setEnabled(k == "file")
+        self.asp_key.setEnabled(k == "openaip")
+        self.asp_btn.setEnabled(k != "none")
+        self.asp_btn.setText({"layer": "Use layer", "file": "Load file"}.get(k, "Download for the mission area"))
+        if k == "none" and getattr(self, "_airspaces", None):
+            self._airspaces, self._asp_sources = [], []
+            self.asp_lbl.setText("Not checked.")
+            lyr = L.find(L.AIRSPACE)
+            if lyr is not None:
+                L.clear(lyr)
+            self._param_changed()
+
+    def _browse_airspace(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Airspace file", self.asp_file.text() or
+                                              QSettings().value("dmp/lastdir", ""),
+                                              "Airspace (*.txt *.air *.openair *.geojson *.json);;All files (*)")
+        if path:
+            self.asp_file.setText(path)
+            QSettings().setValue("dmp/airspace_file", path)
+            self.asp_src.setCurrentIndex(self.asp_src.findData("file"))
+            self.load_airspace()
+
+    def _mission_bbox_wgs84(self, pad_km=10.0):
+        pts = []
+        for name in (L.BOUNDARY, L.CENTRELINE, L.SITE):
+            lyr = L.find(name)
+            if lyr is None:
+                continue
+            xf = L.transform(lyr.crs(), WGS84)
+            for ft in lyr.getFeatures():
+                if ft.hasGeometry():
+                    r = xf.transformBoundingBox(ft.geometry().boundingBox())
+                    pts += [(r.xMinimum(), r.yMinimum()), (r.xMaximum(), r.yMaximum())]
+        if not pts:
+            return None
+        lat = sum(p[1] for p in pts) / len(pts)
+        dlat = pad_km / 111.0
+        dlon = pad_km / (111.0 * max(0.2, math.cos(math.radians(lat))))
+        return (min(p[0] for p in pts) - dlon, min(p[1] for p in pts) - dlat,
+                max(p[0] for p in pts) + dlon, max(p[1] for p in pts) + dlat)
+
+    def _airspace_from_layer(self, lyr):
+        xf = L.transform(lyr.crs(), WGS84)
+        names = [f.name() for f in lyr.fields()]
+        out = []
+        for ft in lyr.getFeatures():
+            if not ft.hasGeometry():
+                continue
+            g = QgsGeometry(ft.geometry())
+            g.transform(xf)
+            rings = []
+            for part in (g.asGeometryCollection() if g.isMultipart() else [g]):
+                poly = part.asPolygon()
+                if poly:
+                    rings.append([(p.x(), p.y()) for p in poly[0]])
+            if not rings:
+                continue
+            props = {n: ft[n] for n in names}
+            props = {k: (None if (v is None or str(v) == "NULL") else v) for k, v in props.items()}
+            a = core.airspace.from_attributes(props, rings, lyr.name())
+            if a is not None:
+                out.append(a)
+        return out
+
+    def load_airspace(self, quiet=False):
+        k = self.asp_src.currentData()
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            try:
+                if k == "layer":
+                    lyr = self.asp_layer.currentLayer()
+                    asp = self._airspace_from_layer(lyr) if isinstance(lyr, QgsVectorLayer) else []
+                    src = [lyr.name()] if lyr else []
+                elif k == "file":
+                    path = self.asp_file.text().strip()
+                    QSettings().setValue("dmp/airspace_file", path)
+                    asp, src = core.airspace.load_file(path), [os.path.basename(path)]
+                elif k in ("faa", "openaip"):
+                    bb = self._mission_bbox_wgs84()
+                    if bb is None:
+                        raise ValueError("Draw or choose the mission boundary / route first - airspace is "
+                                         "downloaded for the mission area.")
+                    if k == "faa":
+                        asp, src = core.airspace.fetch_faa(bb, log=lambda m: None), ["FAA"]
+                    else:
+                        QSettings().setValue("dmp/openaip_key", self.asp_key.text().strip())
+                        asp, src = core.airspace.fetch_openaip(bb, self.asp_key.text().strip()), ["openAIP"]
+                else:
+                    asp, src = [], []
+            finally:
+                QApplication.restoreOverrideCursor()
+        except Exception as e:
+            self._airspaces, self._asp_sources = [], []
+            self.asp_lbl.setText("Airspace not loaded: %s" % e)
+            if not quiet:
+                self._warn("Airspace not loaded: %s" % e)
+            return
+        self._airspaces, self._asp_sources = asp, src
+        use = [a for a in asp if a.category != "ignore"]
+        self.asp_lbl.setText("%d airspace(s) loaded from %s%s." % (len(use), ", ".join(src) or "-",
+                                                                  "" if use else " - nothing recognised"))
+        L.airspace_layer(asp)
         self._param_changed()
 
     def _obstacles(self, work, ext_box):
@@ -1415,6 +1573,17 @@ class MissionDock(QDockWidget):
                     limit = self._m(self.min_agl) - 0.5
                 core.terrain.analyse(m, dem, limit, self._m(self.tagl))
             core.daylight.analyse(m, self._to84_for(work), self.min_sun.value())
+            if self._airspaces:
+                back = L.transform(WGS84, work)
+
+                def from84(lon, lat):
+                    q = back.transform(QgsPointXY(lon, lat))
+                    return q.x(), q.y()
+                core.airspace.check(m, self._airspaces, self._to84_for(work), from84, self.asp_near.value(),
+                                    sources=self._asp_sources)
+                self.asp_lbl.setText("%d airspace(s) from %s - %s" % (
+                    len([a for a in self._airspaces if a.category != "ignore"]), ", ".join(self._asp_sources),
+                    m.airspace.summary))
             self.payload_tbl.set_limit(m.drone.max_payload_kg)
             self.mission, self.work_crs = m, work
             self._draw_result(m, work)

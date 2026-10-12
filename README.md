@@ -1,4 +1,4 @@
-# Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox  (v1.10)
+# Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox  (v1.11)
 
 Plan drone mapping missions from a drawn polygon/line or an imported GIS/CAD file, tune them for wind,
 temperature, altitude and payload, plan the battery changes for big jobs and long linear features, and send
@@ -93,6 +93,38 @@ by `tools/make_report_screenshots.py` (needs pyproj and Playwright).
    gives GSD, spacing, photo count, time and battery use per flight, plus the field schedule.
 10. **Export / upload** (see below), including a printable **field brief** with mission maps drawn over a
     **basemap** (see *Field-brief basemap*).
+
+## Airspace check (aeronautical chart data)
+
+Checks whether the planned mission enters **controlled**, **restricted / prohibited**, **danger / military** or
+**uncontrolled** airspace. QGIS: *Airspace check* group; ArcGIS: *Airspace check* parameters.
+
+| Source | What it is |
+|---|---|
+| **Airspace layer** | Any polygon layer in your project – e.g. Airservices Australia / national AIP shapefiles, FAA downloads, an openAIP export. Fields such as class, type, name and upper/lower limits are recognised automatically (FAA `CLASS`, `UPPER_VAL/UOM/CODE`…, openAIP codes, generic `class`/`type`/`lower`/`upper`). |
+| **File** | **OpenAir** (`.txt`/`.air` – the common worldwide airspace format, incl. arcs and circles), **GeoJSON**, or **ED-269** JSON (EU UAS geographical zones). |
+| **Download – FAA (USA)** | FAA class airspace, special use airspace, prohibited areas and **UAS facility map** grids (LAANC ceilings) for the mission area. No key. |
+| **Download – openAIP** | Worldwide airspace from openAIP. Needs a free API key from openaip.net; check openAIP's data licence before commercial use. |
+
+The check follows **every flight path in 3D** (positions every 25 m; height above sea level from the take-off
+elevation or DEM; airspace limits in ft/m AMSL, AGL or flight levels) and reports for each airspace:
+
+- **INSIDE** – the mission enters it: controlled → approval / authorization needed; restricted / prohibited →
+  don't enter without the controlling authority's approval; danger / military → check activity and NOTAMs;
+  FAA UAS facility map → LAANC ceiling, flagged if the mission flies higher.
+- **Below floor** – inside the footprint but under the base (e.g. a CTA step), with the margin in metres.
+- **Nearby** – within the distance you set (default 1 km).
+
+Results appear in the panel report, as warnings, in the **Airspace** layer (QGIS, styled by category) or the
+`_airspace` feature class (ArcGIS), on the brief/PDF map as dashed outlines, and in an **Airspace** section of
+the HTML brief and PDF.
+
+**This is a planning aid, not an authoritative source.** Airspace data can be out of date and doesn't include
+NOTAMs or temporary restrictions. Always confirm with your authority's approved tools before flight – in
+Australia a CASA-verified drone safety app (which also covers the 5.5 km rule near controlled aerodromes), in
+the USA B4UFLY / LAANC, elsewhere the national service.
+
+![Airspace check in QGIS](docs/screenshots/qgis_airspace.png)
 
 ## Flight date & light
 
@@ -432,6 +464,7 @@ dronemapper_core/
   dem.py             DEM download (Copernicus GLO-30, AWS Terrain Tiles), PNG decoder, fast sampler
   terrain.py         terrain clearance / height-limit checks, GSD over terrain, route profile
   exporters.py       DJI WPML, QGC .plan, Mission Planner, Litchi, KML, GeoJSON, CSV, field brief (HTML)
+  airspace.py        airspace: OpenAir / GeoJSON / ED-269 / layers, FAA & openAIP download, 3-D mission check
   daylight.py        flight date: sun position, sunrise/sunset, twilight, sun height per flight
   footprints.py      photo positions along the flights and image footprints (terrain-aware)
   pdfreport.py       mission report as PDF (pure-Python PDF writer, SVG maps drawn as vector)
@@ -490,6 +523,10 @@ dronemapper_core/
 - v1.10: sun position checked against the astral library (elevation identical to 0.01°, sunrise/sunset/
   twilight within 1 min for Perth, London, Denver and Tromsø); night, twilight and low-sun flights flagged;
   date, time zone and arrival driven in the QGIS panel and the ArcGIS tool.
+- v1.11: OpenAir (polygons, arcs, circles), FAA field layouts, openAIP codes and ED-269 zones parsed; inside /
+  below-floor / nearby verified in 3D (a CTA step becomes 'inside' when the mission climbs above its base); UAS
+  facility-map ceiling flagged; driven in QGIS (file, layer, download) and ArcGIS. The FAA and openAIP servers
+  weren't reachable from the build machine (simulated responses), so the first live download is on your machine.
 - Not yet flown on real aircraft: run a short test mission (or ArduPilot SITL) before production work.
 
 ## Development
@@ -502,7 +539,7 @@ tools/build.py             copies the engine into both plugins and writes dist/*
 tests/                     test scripts, a headless QGIS iface, an arcpy stand-in, sample DEM/CAD data
 docs/examples/             example mission reports (PDF) and field briefs (HTML)
 docs/screenshots/          README images (tools/make_*_screenshots.py)
-docs/releases/             release notes (v1.7.0 – v1.10.0)
+docs/releases/             release notes (v1.7.0 – v1.11.0)
 ```
 
 ```

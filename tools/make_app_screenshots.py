@@ -201,6 +201,66 @@ compose(job.renderedImage(), QImage(0, 0, QImage.Format.Format_RGB32),
         "Image footprints - one rectangle per photo, coloured by flight (QGIS layer 'Image footprints')",
         os.path.join(OUT, "qgis_footprints.png"))
 
+# airspace check with a made-up sample airspace file (not real charts)
+import tempfile as _tf
+def _dm(v, pos, neg):
+    h = pos if v >= 0 else neg; v = abs(v); dd = int(v); mm = (v - dd) * 60
+    return "%d:%06.3f %s" % (dd, mm, h)
+_P = lambda lo, la: "%s %s" % (_dm(la, "N", "S"), _dm(lo, "E", "W"))
+oa = os.path.join(_tf.mkdtemp(), "sample_airspace.txt")
+open(oa, "w").write("""* SAMPLE airspace for screenshots - not real
+AC D
+AN SAMPLE CTR
+AL SFC
+AH 1500ft
+DP %s
+DP %s
+DP %s
+DP %s
+AC C
+AN SAMPLE CTA
+AL 700ft
+AH FL125
+DP %s
+DP %s
+DP %s
+DP %s
+AC R
+AN R999 SAMPLE RANGE
+AL SFC
+AH 3000ft
+V X=%s
+DC 0.35
+""" % (_P(115.70, -32.32), _P(115.7395, -32.32), _P(115.7395, -32.27), _P(115.70, -32.27),
+       _P(115.70, -32.33), _P(115.80, -32.33), _P(115.80, -32.26), _P(115.70, -32.26), _P(115.7555, -32.2985)))
+d.asp_src.setCurrentIndex(d.asp_src.findData("file"))
+d.asp_file.setText(oa)
+d.load_airspace()
+pump(1500)
+box = [b for b in d.widget().widget().findChildren(QGroupBox) if b.title().startswith("Airspace")][0]
+box.setCollapsed(False)
+pump(300)
+alyr = L.find(L.AIRSPACE)
+ms = QgsMapSettings()
+ms.setLayers([L.find(n) for n in (L.SITE, L.ROUTES, L.BOUNDARY)] + [alyr, pw])
+ms.setDestinationCrs(c3857)
+ms.setExtent(xf.transformBoundingBox(QgsRectangle(115.7265, -32.3045, 115.7615, -32.2885)))
+ms.setOutputSize(QSize(1000, 760))
+ms.setOutputDpi(110)
+ms.setBackgroundColor(PAPER)
+job = QgsMapRendererParallelJob(ms)
+job.start()
+job.waitForFinished()
+p_img, root = panel_image()
+top = box.mapTo(root, QPoint(0, 0)).y()
+compose(job.renderedImage(), p_img.copy(0, top, p_img.width(), 760),
+        "Airspace check - sample airspace file: the mission enters a CTR and a restricted area and flies under a CTA floor",
+        os.path.join(OUT, "qgis_airspace.png"))
+print([l for l in d.report.toPlainText().splitlines() if l.startswith(("  Result", "  INSIDE", "  BELOW", "  NEAR"))])
+d.asp_src.setCurrentIndex(d.asp_src.findData("none"))
+box.setCollapsed(True)
+pump(800)
+
 dlg = UploadDialog(d)
 w = max(dlg.sizeHint().width(), 760)
 dlg.layout().activate()

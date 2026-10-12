@@ -20,7 +20,9 @@ from . import geometry as G
 CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 ORDINAL = ["#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab",
            "#184f95", "#104281", "#0d366b"]               # blue 250 -> 700
-CRITICAL, SERIOUS = "#d03b3b", "#ec835a"                 # status: low clearance / above limit
+CRITICAL, SERIOUS = "#d03b3b", "#ec835a"
+AIRSPACE_COLOURS = {"controlled": "#a21caf", "restricted": "#d03b3b", "danger": "#ea580c",
+                    "uncontrolled": "#64748b", "other": "#64748b"}                 # status: low clearance / above limit
 INK, INK2, MUTED = "#0b0b0b", "#52514e", "#8a8984"
 SURFACE = "#fcfcfb"
 
@@ -146,6 +148,31 @@ def svg_map(mission, width=900, background=None, kp_interval=None, title=None, v
                 out.append('<g>%s<circle cx="%.1f" cy="%.1f" r="4" fill="#fff" stroke="%s" stroke-width="2"/>'
                            '<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1.5"/></g>'
                            % (tip, cx, cy, INK, cx - 3, cy - 3, cx + 3, cy + 3, INK))
+    # airspace (outlines; the airspace itself usually extends far beyond the map)
+    asp = getattr(mission, "airspace", None)
+    if asp is not None:
+        for h in asp.hits:
+            if not h.ring_xy or h.status == "above":
+                continue
+            col = AIRSPACE_COLOURS.get(h.airspace.category, MUTED)
+            for ring in h.ring_xy:
+                out.append('<polygon points="%s" fill="none" stroke="%s" stroke-width="2.2" '
+                           'stroke-dasharray="8 4"><title>%s</title></polygon>'
+                           % (pts(ring), col, escape("%s %s %s" % (h.airspace.label, h.airspace.name,
+                                                                       h.airspace.limits_text))))
+                vis = []                              # points of the boundary inside the frame
+                for p0, p1 in zip(ring[:-1], ring[1:]):
+                    for k in range(21):
+                        qx = X(p0[0] + (p1[0] - p0[0]) * k / 20.0)
+                        qy = Y(p0[1] + (p1[1] - p0[1]) * k / 20.0)
+                        if 8 < qx < W - 170 and 30 < qy < H - 40:
+                            vis.append((qx, qy))
+                if vis:
+                    lx, ly = vis[len(vis) // 2]
+                    out.append('<text class="lbl" x="%.1f" y="%.1f" font-size="10.5" font-weight="700" fill="%s">'
+                               '%s</text>' % (lx + 4, ly - 4, col, escape(("%s %s" % (h.airspace.label,
+                                                                                      h.airspace.name))[:40])))
+                    break
     # flights
     cols = flight_colours(len(mission.flights))
     sched = {r.flight: r for r in (mission.schedule.rows if mission.schedule else [])}
@@ -299,6 +326,13 @@ def legend_html(mission):
                      '(numbered on the map)' % (grad, n))
     items.append("%sTransit to / from launch station" % sw(INK2, True))
     items.append('<span style="color:%s;margin-right:4px">&#9650;</span>Launch station' % INK)
+    asp = getattr(mission, "airspace", None)
+    if asp is not None and any(h.ring_xy and h.status != "above" for h in asp.hits):
+        for cat, lab in (("controlled", "Controlled airspace"), ("restricted", "Restricted / prohibited"),
+                         ("danger", "Danger / military"), ("uncontrolled", "Uncontrolled airspace")):
+            if any(h.airspace.category == cat and h.ring_xy for h in asp.hits):
+                items.append('<span style="display:inline-block;width:22px;height:0;border-top:2px dashed %s;'
+                             'vertical-align:middle;margin-right:5px"></span>%s' % (AIRSPACE_COLOURS[cat], lab))
     if getattr(mission, "obstacles", None):
         items.append('<span style="display:inline-block;width:14px;height:10px;margin-right:5px;'
                      'background:repeating-linear-gradient(45deg,%s 0 1.5px,transparent 1.5px 5px);'
