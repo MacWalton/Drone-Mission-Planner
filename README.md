@@ -525,7 +525,8 @@ dronemapper_core/
   vertex edits, manual CRS, DXF import, DEM terrain following, route mode, all exports, upload dialog, unload.
 - ArcGIS Pro toolbox: all tools executed against a functional `arcpy` stand-in in the automated tests, including
   CAD input, DEM sampling and validation messages; area and route missions have also been planned in ArcGIS Pro
-  itself on real sites (see *Screenshots ▸ ArcGIS Pro*).
+  itself on real sites (see *Screenshots ▸ ArcGIS Pro*). **v1.12.1 confirmed working in ArcGIS Pro** (13 Oct 2026)
+  after the engine-loading fix.
 - v1.1 battery & linear features: a 400 ha block (2 stations and an auto-placed 4-station grid with a 1 km VLOS
   limit) and a 25 km pipeline supplied as shuffled, reversed pieces (chainage window, asymmetric widths,
   11 auto stations). Checked: survey length flown ≥ planned (no gaps at battery changes), no flight over 100 %
@@ -571,6 +572,8 @@ dronemapper_core/
 - v1.12: footprint extent matches the union of all photo footprints (area and outline checked for rectangular,
   L-shaped, angled and route missions); individual footprints only when ticked; automatic airspace picks FAA in
   the USA and openAIP elsewhere, re-uses the download and reports 'not checked' when unavailable.
+- Still to be confirmed in the field: the live airspace download (FAA / openAIP with your key) and
+  flying an exported mission on the aircraft.
 - Not yet flown on real aircraft: run a short test mission (or ArduPilot SITL) before production work.
 
 ## Development
