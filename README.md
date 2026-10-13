@@ -18,7 +18,7 @@ Live MAVLink upload needs **pymavlink** (optional):
 
 ## Screenshots
 
-*Sample data near Perth, WA. These were rendered headless, so the QGIS panel and the mission layers are
+*QGIS images: sample data near Perth, WA. These were rendered headless, so the QGIS panel and the mission layers are
 shown side by side rather than inside the full QGIS window.*
 
 **QGIS – area mission with two launch stations, a powerline obstacle and the planner panel**
@@ -32,6 +32,32 @@ shown side by side rather than inside the full QGIS window.*
 
 **Upload to drone – MAVLink, copy to controller / SD card, or replace a DJI Fly mission**
 <img src="docs/screenshots/qgis_upload_dialog.png" alt="Upload dialog" width="620">
+
+### ArcGIS Pro
+
+Real missions planned with the ArcGIS Pro toolbox (DJI Matrice 300 RTK + P1, World Imagery basemap) – screenshots
+from ArcGIS Pro.
+
+**Area mission over an industrial complex** – photo footprints (yellow), take-off point (red), flight lines and
+the aircraft overrides in the *Create Area Mapping Mission* tool
+![ArcGIS Pro – area mission, industrial complex](docs/screenshots/arcgis/arcgis_area_industrial_complex.jpg)
+
+**Area mission over port stockpiles** – lines aligned with a 20 kn wind from 273°, photo footprints, red take-off
+point and the flight parameters
+![ArcGIS Pro – area mission, berth stockpiles](docs/screenshots/arcgis/arcgis_area_berth_stockpiles.jpg)
+
+**Route / corridor mission along a railway** – corridor footprints (yellow), waypoints and flight lines with the
+*Create Route Mapping Mission* tool
+![ArcGIS Pro – route mission, railway corridor](docs/screenshots/arcgis/arcgis_route_railway_corridor.jpg)
+
+**Tool parameters** – flight parameters, wind in knots, payload, terrain (DEM) · obstacles, output and export
+formats incl. the PDF report · corridor widths, auto launch stations, leapfrog and the field schedule
+
+<p>
+<img src="docs/screenshots/arcgis/arcgis_params_flight_conditions_terrain.png" alt="Flight parameters, conditions and terrain" width="32%">
+<img src="docs/screenshots/arcgis/arcgis_params_obstacles_output_export.png" alt="Obstacles, output and export" width="32%">
+<img src="docs/screenshots/arcgis/arcgis_params_corridor_stations_schedule.png" alt="Corridor, launch stations and schedule" width="32%">
+</p>
 
 ### Mission report (field brief)
 
@@ -497,9 +523,9 @@ dronemapper_core/
   UDP with MAVLink 1 and 2 — every item received and acknowledged.
 - QGIS 3.34: the real plugin loaded and driven end-to-end — draw, pick, live re-plan on parameter and
   vertex edits, manual CRS, DXF import, DEM terrain following, route mode, all exports, upload dialog, unload.
-- ArcGIS Pro toolbox: all four tools executed against a functional `arcpy` stand-in (no ArcGIS licence was
-  available here), including CAD input, DEM sampling and validation messages. Please run one test mission in
-  Pro and report anything odd.
+- ArcGIS Pro toolbox: all tools executed against a functional `arcpy` stand-in in the automated tests, including
+  CAD input, DEM sampling and validation messages; area and route missions have also been planned in ArcGIS Pro
+  itself on real sites (see *Screenshots ▸ ArcGIS Pro*).
 - v1.1 battery & linear features: a 400 ha block (2 stations and an auto-placed 4-station grid with a 1 km VLOS
   limit) and a 25 km pipeline supplied as shuffled, reversed pieces (chainage window, asymmetric widths,
   11 auto stations). Checked: survey length flown ≥ planned (no gaps at battery changes), no flight over 100 %
