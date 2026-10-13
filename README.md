@@ -1,4 +1,4 @@
-# Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox  (v1.11)
+# Drone Mission Planner — QGIS plugin & ArcGIS Pro toolbox  (v1.12)
 
 Plan drone mapping missions from a drawn polygon/line or an imported GIS/CAD file, tune them for wind,
 temperature, altitude and payload, plan the battery changes for big jobs and long linear features, and send
@@ -88,7 +88,8 @@ by `tools/make_report_screenshots.py` (needs pyproj and Playwright).
    following, per-station heights, safe transits, terrain checks and the route profile.
 8. **Battery changes & field schedule** – see below.
 9. **Plan** – layers: boundary, survey legs, flight routes (coloured per battery, with launch station, battery
-   set, clock times and KP range), waypoints, photo centres, **image footprints**, launch stations, chainage
+   set, clock times and KP range), waypoints, photo centres, the **mission footprint** (optionally every photo's
+   footprint), launch stations (red dots), chainage
    markers. The report
    gives GSD, spacing, photo count, time and battery use per flight, plus the field schedule.
 10. **Export / upload** (see below), including a printable **field brief** with mission maps drawn over a
@@ -99,8 +100,14 @@ by `tools/make_report_screenshots.py` (needs pyproj and Playwright).
 Checks whether the planned mission enters **controlled**, **restricted / prohibited**, **danger / military** or
 **uncontrolled** airspace. QGIS: *Airspace check* group; ArcGIS: *Airspace check* parameters.
 
+**Automatic (default):** when you plan, the airspace for the project area (mission + 10 km) is downloaded –
+from the **FAA in the USA** (no key) and from **openAIP everywhere else** (enter your free openAIP API key once;
+it's remembered). It's downloaded once and re-used while the mission stays inside that area; *Download again
+now* refreshes it. Without a key outside the USA, or offline, the report says the airspace was **not checked**.
+
 | Source | What it is |
 |---|---|
+| **Automatic** (default) | FAA (USA) or openAIP (elsewhere, API key) for the project area, on every plan. |
 | **Airspace layer** | Any polygon layer in your project – e.g. Airservices Australia / national AIP shapefiles, FAA downloads, an openAIP export. Fields such as class, type, name and upper/lower limits are recognised automatically (FAA `CLASS`, `UPPER_VAL/UOM/CODE`…, openAIP codes, generic `class`/`type`/`lower`/`upper`). |
 | **File** | **OpenAir** (`.txt`/`.air` – the common worldwide airspace format, incl. arcs and circles), **GeoJSON**, or **ED-269** JSON (EU UAS geographical zones). |
 | **Download – FAA (USA)** | FAA class airspace, special use airspace, prohibited areas and **UAS facility map** grids (LAANC ceilings) for the mission area. No key. |
@@ -148,9 +155,17 @@ Weather forecasts and NOTAMs still need checking online before you fly.
 
 ![Flight date and light in QGIS](docs/screenshots/qgis_flight_date.png)
 
-## Image footprints
+## Mission footprint & image footprints
 
-Every photo gets its ground footprint – the rectangle the image covers – in the **Image footprints** layer
+The **Mission footprint** – the outline of all ground the photos cover – is always calculated and shown as a
+**yellow outline with no fill** (QGIS layer *Mission footprint*, ArcGIS `_footprint`, and on the brief / PDF map),
+with its area in the report ("Image coverage"). It's traced from the footprints of all photos on a grid aligned
+with the flight lines, so it follows the real coverage including staggered line ends and holes.
+
+**Individual photo footprints** are optional – tick *Calculate individual photo footprints* (QGIS: Flight
+parameters; ArcGIS: Output). Off by default because large missions have thousands of photos.
+
+When ticked, every photo gets its ground footprint – the rectangle the image covers – in the **Image footprints** layer
 (QGIS) or the `_footprints` feature class (ArcGIS), outlined in its flight's colour so overlap and coverage
 are easy to check.
 
@@ -527,6 +542,9 @@ dronemapper_core/
   below-floor / nearby verified in 3D (a CTA step becomes 'inside' when the mission climbs above its base); UAS
   facility-map ceiling flagged; driven in QGIS (file, layer, download) and ArcGIS. The FAA and openAIP servers
   weren't reachable from the build machine (simulated responses), so the first live download is on your machine.
+- v1.12: footprint extent matches the union of all photo footprints (area and outline checked for rectangular,
+  L-shaped, angled and route missions); individual footprints only when ticked; automatic airspace picks FAA in
+  the USA and openAIP elsewhere, re-uses the download and reports 'not checked' when unavailable.
 - Not yet flown on real aircraft: run a short test mission (or ArduPilot SITL) before production work.
 
 ## Development
@@ -539,7 +557,7 @@ tools/build.py             copies the engine into both plugins and writes dist/*
 tests/                     test scripts, a headless QGIS iface, an arcpy stand-in, sample DEM/CAD data
 docs/examples/             example mission reports (PDF) and field briefs (HTML)
 docs/screenshots/          README images (tools/make_*_screenshots.py)
-docs/releases/             release notes (v1.7.0 – v1.11.0)
+docs/releases/             release notes (v1.7.0 – v1.12.0)
 ```
 
 ```

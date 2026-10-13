@@ -21,6 +21,8 @@ CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300",
 ORDINAL = ["#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab",
            "#184f95", "#104281", "#0d366b"]               # blue 250 -> 700
 CRITICAL, SERIOUS = "#d03b3b", "#ec835a"
+COVERAGE = "#facc15"                                     # footprint extent: yellow outline, no fill
+LAUNCH = "#e11d1d"                                       # take-off / launch stations: red dots
 AIRSPACE_COLOURS = {"controlled": "#a21caf", "restricted": "#d03b3b", "danger": "#ea580c",
                     "uncontrolled": "#64748b", "other": "#64748b"}                 # status: low clearance / above limit
 INK, INK2, MUTED = "#0b0b0b", "#52514e", "#8a8984"
@@ -43,6 +45,9 @@ def map_view(mission, width=900, pad_frac=0.05, focus=None, aspect_range=(0.3, 1
         pts = [p for ring in mission.boundary for p in ring]
         pts += [(w.x, w.y) for f in mission.flights for w in f.waypoints]
         pts += [tuple(s) for s in mission.stations] + [tuple(mission.landing)]
+        cov = getattr(mission, "coverage", None)
+        if cov and cov.get("rings"):
+            pts += [p for r in cov["rings"] for p in r]
     xs, ys = [p[0] for p in pts], [p[1] for p in pts]
     x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
     w, h = max(x1 - x0, 1.0), max(y1 - y0, 1.0)
@@ -148,6 +153,14 @@ def svg_map(mission, width=900, background=None, kp_interval=None, title=None, v
                 out.append('<g>%s<circle cx="%.1f" cy="%.1f" r="4" fill="#fff" stroke="%s" stroke-width="2"/>'
                            '<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1.5"/></g>'
                            % (tip, cx, cy, INK, cx - 3, cy - 3, cx + 3, cy + 3, INK))
+    # footprint extent of all photos (yellow, no fill; dark halo keeps it visible on light maps)
+    cov = getattr(mission, "coverage", None)
+    if cov and cov.get("rings"):
+        d = " ".join("M" + " L".join("%.1f %.1f" % (X(p[0]), Y(p[1])) for p in r) + " Z" for r in cov["rings"])
+        out.append('<path d="%s" fill="none" stroke="#3f3f46" stroke-width="4" stroke-opacity="0.55" '
+                   'stroke-linejoin="round"/><path d="%s" fill="none" stroke="%s" stroke-width="2.2" '
+                   'stroke-linejoin="round"><title>Image coverage %.2f ha</title></path>'
+                   % (d, d, COVERAGE, cov["area_m2"] / 1e4))
     # airspace (outlines; the airspace itself usually extends far beyond the map)
     asp = getattr(mission, "airspace", None)
     if asp is not None:
@@ -271,11 +284,10 @@ def svg_map(mission, width=900, background=None, kp_interval=None, title=None, v
     for st in mission.stations:
         cx, cy = X(st[0]), Y(st[1])
         n = sum(1 for f in mission.flights if tuple(f.station_start) == tuple(st))
-        out.append('<polygon points="%.1f,%.1f %.1f,%.1f %.1f,%.1f" fill="%s" stroke="#fff" stroke-width="1.5">'
-                   '<title>%s: %d flight(s)</title></polygon><text class="lbl" x="%.1f" y="%.1f" '
+        out.append('<circle cx="%.1f" cy="%.1f" r="6.5" fill="%s" stroke="#fff" stroke-width="2">'
+                   '<title>%s: %d flight(s)</title></circle><text class="lbl" x="%.1f" y="%.1f" '
                    'font-size="12" font-weight="700" fill="%s">%s</text>'
-                   % (cx, cy - 9, cx - 8, cy + 6, cx + 8, cy + 6, INK, mission.label(st), n,
-                      cx + 10, cy + 4, INK, mission.label(st)))
+                   % (cx, cy, LAUNCH, mission.label(st), n, cx + 10, cy + 4, INK, mission.label(st)))
     if tuple(mission.landing) not in [tuple(s) for s in mission.stations]:
         cx, cy = X(mission.landing[0]), Y(mission.landing[1])
         out.append('<rect x="%.1f" y="%.1f" width="12" height="12" fill="%s" stroke="#fff" stroke-width="1.5"/>'
@@ -325,7 +337,11 @@ def legend_html(mission):
                      'vertical-align:middle;margin-right:5px;border-radius:3px"></span>Flights 1 &rarr; %d '
                      '(numbered on the map)' % (grad, n))
     items.append("%sTransit to / from launch station" % sw(INK2, True))
-    items.append('<span style="color:%s;margin-right:4px">&#9650;</span>Launch station' % INK)
+    items.append('<span style="color:%s;margin-right:4px">&#9679;</span>Take-off / launch station' % LAUNCH)
+    if getattr(mission, "coverage", None) and mission.coverage.get("rings"):
+        items.append('<span style="display:inline-block;width:22px;height:0;border-top:3px solid %s;'
+                     'outline:1px solid #3f3f46;vertical-align:middle;margin-right:5px"></span>Image coverage '
+                     '(footprint extent)' % COVERAGE)
     asp = getattr(mission, "airspace", None)
     if asp is not None and any(h.ring_xy and h.status != "above" for h in asp.hits):
         for cat, lab in (("controlled", "Controlled airspace"), ("restricted", "Restricted / prohibited"),

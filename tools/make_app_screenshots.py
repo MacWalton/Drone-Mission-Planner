@@ -51,7 +51,7 @@ def pump(ms=1200):
 
 
 def render(extra, extent, size):
-    order = [L.TERRAIN, L.SITE, L.CHAINAGE, L.WAYPOINTS, L.ROUTES, L.LEGS, L.PHOTOS, L.BOUNDARY, L.CENTRELINE]
+    order = [L.TERRAIN, L.SITE, L.CHAINAGE, L.WAYPOINTS, L.ROUTES, L.LEGS, L.PHOTOS, L.COVERAGE, L.BOUNDARY, L.CENTRELINE]
     lyrs = [L.find(n) for n in order if L.find(n) and n != L.PHOTOS] + extra
     ms = QgsMapSettings()
     ms.setLayers(lyrs)
@@ -183,10 +183,12 @@ compose(m_img, p2.copy(0, y - 52, p2.width(), 760),
 d.report.setMinimumHeight(0); d.report.setMaximumHeight(16777215)
 print("wrote docs/screenshots/qgis_panel_full.png")
 
-# image footprints, zoomed to the south-west corner of the block
+# image footprints (individual footprints are off by default - tick the setting for this shot)
+d.indiv_fp.setChecked(True)
+pump(1500)
 fl = L.find(L.FOOTPRINTS)
 print("image footprints:", fl.featureCount())
-lyrs = [L.find(n) for n in (L.SITE, L.WAYPOINTS, L.ROUTES, L.PHOTOS, L.BOUNDARY) if L.find(n)] + [fl]
+lyrs = [L.find(n) for n in (L.SITE, L.WAYPOINTS, L.ROUTES, L.PHOTOS, L.COVERAGE, L.BOUNDARY) if L.find(n)] + [fl]
 ms = QgsMapSettings()
 ms.setLayers(lyrs)
 ms.setDestinationCrs(c3857)
@@ -200,6 +202,8 @@ job.waitForFinished()
 compose(job.renderedImage(), QImage(0, 0, QImage.Format.Format_RGB32),
         "Image footprints - one rectangle per photo, coloured by flight (QGIS layer 'Image footprints')",
         os.path.join(OUT, "qgis_footprints.png"))
+d.indiv_fp.setChecked(False)
+pump(1500)
 
 # airspace check with a made-up sample airspace file (not real charts)
 import tempfile as _tf
@@ -325,6 +329,8 @@ d.set_boundary(QgsGeometry.fromPolygonXY([[xf.transform(P(*q)) for q in ring]]),
 pump()
 d._picked("takeoff", xf.transform(P(115.7454, -32.3156)))
 pump(2000)
+d.indiv_fp.setChecked(True)
+pump(1500)
 fl = L.find(L.FOOTPRINTS)
 vals = [f["gsd_cm"] for f in fl.getFeatures()]
 lo, hi = min(vals), max(vals)

@@ -40,6 +40,23 @@ AH 3000ft
 V X=%s
 DC 0.5
 """ % (Pt(115.70, -32.32), Pt(115.740, -32.32), Pt(115.740, -32.27), Pt(115.70, -32.27), Pt(115.760, -32.296)))
+print("== QGIS: defaults - automatic airspace, mission footprint only, red take-off dots")
+d.set_boundary(QgsGeometry.fromPolygonXY([[xf.transform(P(*q)) for q in ring]]), c3857); pump()
+print("   source:", d.asp_src.currentData(), "|", d.asp_lbl.text()[:90])
+assert d.asp_src.currentData() == "auto" and "openAIP API key" in d.asp_lbl.text()   # Perth, no key yet
+cl = L.find(L.COVERAGE); fpl = L.find(L.FOOTPRINTS)
+print("   mission footprint features:", cl.featureCount(), "area ha:", [f["area_ha"] for f in cl.getFeatures()],
+      "| individual footprints:", fpl.featureCount(), "| indiv box:", d.indiv_fp.isChecked())
+assert cl.featureCount() >= 1 and fpl.featureCount() == 0 and not d.indiv_fp.isChecked()
+sym = cl.renderer().symbol().symbolLayer(0)
+print("   coverage style: outline", sym.strokeColor().name(), "fill style", sym.brushStyle())
+assert sym.strokeColor().name() == "#facc15"
+d.indiv_fp.setChecked(True); pump(1500)
+print("   individual footprints when ticked:", fpl.featureCount()); assert fpl.featureCount() > 100
+d.indiv_fp.setChecked(False); pump(1500); assert fpl.featureCount() == 0
+site = L.find(L.SITE); cats = {c.value(): c.symbol().color().name() for c in site.renderer().categories()}
+print("   site symbols:", cats); assert cats["takeoff"] == "#e11d1d" and cats["station"] == "#e11d1d"
+assert "Image coverage" in d.report.toPlainText()
 print("== QGIS: file source")
 d.set_boundary(QgsGeometry.fromPolygonXY([[xf.transform(P(*q)) for q in ring]]), c3857); pump()
 d.asp_src.setCurrentIndex(d.asp_src.findData("file")); d.asp_file.setText(oa); d.load_airspace(); pump(1500)
@@ -78,6 +95,12 @@ QFileDialog.getSaveFileName = staticmethod(lambda *a, **k: (os.path.join(out, "a
 d.brief_bg.setCurrentIndex(d.brief_bg.findData("none"))
 d.fmt_cb.setCurrentIndex(d.fmt_cb.findData("brief_pdf")); d.export()
 print("   PDF:", os.path.getsize(os.path.join(out, "asp.pdf")) // 1024, "KB")
+print("== QGIS: automatic with an openAIP key (fake transport)")
+core.airspace._http_json = lambda url, headers=None, timeout=30, fetch=None: {"items": [{"name": "AUTO TMA", "type": 7, "icaoClass": 2,
+    "upperLimit": {"value": 85, "unit": 6, "referenceDatum": 2}, "lowerLimit": {"value": 0, "unit": 1, "referenceDatum": 0},
+    "geometry": {"type": "Polygon", "coordinates": [[[115.72, -32.31], [115.76, -32.31], [115.76, -32.28], [115.72, -32.31]]]}}], "totalPages": 1}
+d.asp_src.setCurrentIndex(d.asp_src.findData("auto")); d.asp_key.setText("KEY"); d.asp_key.editingFinished.emit(); pump(1500)
+print("  ", d.asp_lbl.text()); assert "AUTO TMA" in [h.airspace.name for h in d.mission.airspace.hits]
 d.asp_src.setCurrentIndex(d.asp_src.findData("none")); pump(1200)
 assert d.mission.airspace is None
 print("== ArcGIS: file + layer")

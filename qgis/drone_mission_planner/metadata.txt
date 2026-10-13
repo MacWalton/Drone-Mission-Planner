@@ -5,7 +5,7 @@ qgisMaximumVersion=4.99
 supportsQt6=True
 description=Plan drone mapping missions (area grids and route corridors) from drawn polygons or GIS/CAD files, and send them to DJI, ArduPilot, PX4, Litchi and Autel aircraft.
 about=Draw or import a boundary (Shapefile, GeoPackage, GeoJSON, KML, DXF/DWG CAD and any OGR format), choose the coordinate system, pick take-off and landing points, set flying height or ground pixel size (GSD), overlaps and heading, and get a mission tuned for wind, temperature, altitude and payload with automatic battery splitting. Exports DJI WPML KMZ (Pilot 2 / FlightHub 2), QGroundControl .plan, Mission Planner .waypoints, Litchi CSV, KML, GeoJSON and CSV, and uploads live to MAVLink autopilots. Optional terrain following from a DEM. Large jobs are split into battery-sized flights across multiple launch stations with a field schedule; linear features (roads, pipelines, powerlines, rail, rivers) can be picked on the map, chained and mapped by chainage.
-version=1.11.0
+version=1.12.0
 author=Drone Mission Planner
 email=macalister.walton@gmail.com
 category=Plugins
@@ -17,7 +17,8 @@ experimental=False
 deprecated=False
 icon=icon.png
 hasProcessingProvider=no
-changelog=1.11.0 Airspace check: OpenAir / GeoJSON / ED-269 files, airspace layers, FAA (USA) and openAIP downloads; every flight path checked in 3D for controlled, restricted, danger and uncontrolled airspace (inside, below floor, nearby); Airspace layer, warnings, map outlines and an Airspace section in the brief and PDF.
+changelog=1.12.0 Airspace downloaded automatically for the project area (FAA in the USA, openAIP elsewhere with an API key). Mission footprint (extent of all photos) always shown as a yellow outline; individual photo footprints only when ticked (default off). Take-off and launch stations shown as red dots.
+    1.11.0 Airspace check: OpenAir / GeoJSON / ED-269 files, airspace layers, FAA (USA) and openAIP downloads; every flight path checked in 3D for controlled, restricted, danger and uncontrolled airspace (inside, below floor, nearby); Airspace layer, warnings, map outlines and an Airspace section in the brief and PDF.
     1.10.0 Flight date, site time zone and arrival time: sunrise/sunset and civil twilight at the site, sun height per flight, warnings for night/twilight and low-sun flights, best-light window; shown in the report, HTML brief and PDF (Sun column); mission name uses the flight date.
     1.9.0 Image footprints: one polygon per photo (Image footprints layer / _footprints feature class), placed along the planned flights, sized for the height above ground at each photo (DEM-aware), with GSD and size attributes.
     1.8.0 Mission report as PDF (opens anywhere, prints on A4, vector maps with embedded basemap). Wind speed in knots by default (m/s, km/h selectable). DJI Enterprise aircraft: Matrice 4E/4T, Matrice 4D/4TD and 3D/3TD (dock), Mavic 3E/3T/3M, Matrice 30/30T, Matrice 350 RTK and 300 RTK with P1/L1/L2, Matrice 400 with P1/L2/L3, with DJI WPML aircraft/payload/sub-type codes; template prompt for aircraft whose codes DJI hasn't published.

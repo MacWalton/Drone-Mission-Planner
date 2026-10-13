@@ -15,7 +15,7 @@ import os
 import hashlib
 import urllib.request
 
-UA = "DroneMissionPlanner/1.11 (QGIS/ArcGIS field-brief map)"
+UA = "DroneMissionPlanner/1.12 (QGIS/ArcGIS field-brief map)"
 
 SOURCES = {
     "osm": {"name": "OpenStreetMap",

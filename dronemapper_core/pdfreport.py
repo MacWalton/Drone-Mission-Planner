@@ -605,7 +605,10 @@ def _legend(r, mission):
     else:
         items.append(("ramp", None, "Flights 1 → %d (numbered on the map)" % n))
     items.append(("dash", colour(INK2), "Transit to / from launch station"))
-    items.append(("tri", INK, "Launch station"))
+    from .briefmap import LAUNCH, COVERAGE
+    items.append(("dot", colour(LAUNCH), "Take-off / launch station"))
+    if getattr(mission, "coverage", None) and mission.coverage.get("rings"):
+        items.append(("cov", colour(COVERAGE), "Image coverage (footprint extent)"))
     if getattr(mission, "obstacles", None):
         items.append(("box", colour("#8a8984"), "Obstacle"))
     if getattr(mission, "terrain", None) is not None and mission.terrain.issues:
@@ -633,6 +636,11 @@ def _legend(r, mission):
         elif kind == "ramp":
             for k, c in enumerate(ORDINAL):
                 r.pdf.op("%.3f %.3f %.3f rg %.2f %.2f 2 4 re f" % (colour(c) + (x + k * 2, yb - 2)))
+        elif kind == "dot":
+            r.pdf.op("%.3f %.3f %.3f rg %s f" % (col + (_circle(x + 8, yb, 3.6),)))
+        elif kind == "cov":
+            r.pdf.op("q 0.25 0.25 0.28 RG 3.4 w %.2f %.2f m %.2f %.2f l S %.3f %.3f %.3f RG 2 w %.2f %.2f m %.2f %.2f l S Q"
+                     % ((x, yb, x + 16, yb) + col + (x, yb, x + 16, yb)))
         elif kind == "tri":
             r.pdf.op("%.3f %.3f %.3f rg %.2f %.2f m %.2f %.2f l %.2f %.2f l h f"
                      % (col + (x + 4, yb - 3, x + 12, yb - 3, x + 8, yb + 4)))

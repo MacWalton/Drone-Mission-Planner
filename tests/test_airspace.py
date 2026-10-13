@@ -120,3 +120,15 @@ h = open(os.path.join(out, "b.html"), encoding="utf-8").read()
 assert "<h2>Airspace</h2>" in h and "TEST CTR" in h
 exporters.export(m, "brief_pdf", os.path.join(out, "b.pdf"), to84)
 print("airspace OK")
+# automatic source: USA -> FAA, elsewhere -> openAIP with key, else a clear message; caching
+calls.clear()
+auto = A.AutoAirspace(fetch=fake)
+asp_us, src_us = auto.get([(-104.99, 39.74), (-104.98, 39.75)])
+assert src_us == ["FAA"] and asp_us and len(calls) == 4
+auto.get([(-104.985, 39.745)]); assert len(calls) == 4               # inside the downloaded area: cached
+auto2 = A.AutoAirspace(fetch=fake)
+assert auto2.get([(lon0, lat0)])[0] == [] and "openAIP API key" in auto2.status
+asp_au, src_au = auto2.get([(lon0, lat0)], "KEY"); assert src_au == ["openAIP"] and asp_au
+bad = A.AutoAirspace(fetch=lambda u, h: (_ for _ in ()).throw(IOError("offline")))
+assert bad.get([(-104.99, 39.74)])[0] == [] and "failed" in bad.status
+print("auto airspace OK:", auto.status, "|", auto2.status)

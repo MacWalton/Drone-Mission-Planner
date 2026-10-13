@@ -31,7 +31,7 @@ from typing import List, Optional
 
 FT = 0.3048
 NM = 1852.0
-UA = "DroneMissionPlanner/1.11 (airspace check)"
+UA = "DroneMissionPlanner/1.12 (airspace check)"
 
 CONTROLLED_KINDS = {"CTR", "CTA", "TMA", "MCTR", "CLASS B", "CLASS C", "CLASS D", "CLASS E", "ATZ", "MATZ",
                     "TIZ", "TIA", "HTZ"}
@@ -649,3 +649,73 @@ def check(mission, airspaces, to_wgs84, from_wgs84=None, near_m=1000.0, step_m=2
         if h.airspace.category in ("controlled", "restricted"):
             w.append("AIRSPACE: " + h.message + " - stay clear")
     return rep
+
+
+# ------------------------------------------------------------------ automatic download
+US_BOXES = [(-125.0, 24.0, -66.5, 49.5),     # contiguous USA
+            (-170.0, 51.0, -129.0, 71.5),    # Alaska
+            (-161.0, 18.5, -154.0, 22.5),    # Hawaii
+            (-67.5, 17.5, -65.0, 18.6)]      # Puerto Rico
+
+
+def in_usa(lon, lat):
+    return any(a <= lon <= c and b <= lat <= d for a, b, c, d in US_BOXES)
+
+
+def project_bbox(lonlats, pad_km=10.0):
+    lat = sum(p[1] for p in lonlats) / len(lonlats)
+    dlat = pad_km / 111.0
+    dlon = pad_km / (111.0 * max(0.2, math.cos(math.radians(lat))))
+    return (min(p[0] for p in lonlats) - dlon, min(p[1] for p in lonlats) - dlat,
+            max(p[0] for p in lonlats) + dlon, max(p[1] for p in lonlats) + dlat)
+
+
+class AutoAirspace(object):
+    """Downloads airspace for the project area automatically - FAA in the USA,
+    openAIP elsewhere (free API key) - and re-uses it while the mission stays
+    inside the downloaded area. Failures are remembered so live re-planning
+    doesn't retry on every change."""
+
+    def __init__(self, fetch=None, log=None):
+        self.fetch, self.log = fetch, log or (lambda *_: None)
+        self.box = None
+        self.airspaces, self.sources = [], []
+        self.status = "Not downloaded yet."
+        self._failed = {}
+
+    @staticmethod
+    def _inside(inner, outer):
+        return outer and inner[0] >= outer[0] and inner[1] >= outer[1] and inner[2] <= outer[2] and inner[3] <= outer[3]
+
+    def get(self, lonlats, openaip_key=""):
+        """(airspaces, sources) for an area given by WGS84 points; downloads when needed."""
+        tight = project_bbox(lonlats, 2.0)
+        if self._inside(tight, self.box):
+            return self.airspaces, self.sources
+        c = (sum(p[0] for p in lonlats) / len(lonlats), sum(p[1] for p in lonlats) / len(lonlats))
+        usa = in_usa(*c)
+        key = (round(c[0], 2), round(c[1], 2), usa, bool(openaip_key))
+        if key in self._failed:
+            self.status = self._failed[key]
+            return [], []
+        box = project_bbox(lonlats, 10.0)
+        try:
+            if usa:
+                asp, src = fetch_faa(box, fetch=self.fetch, log=self.log), ["FAA"]
+            elif openaip_key:
+                asp, src = fetch_openaip(box, openaip_key, fetch=self.fetch, log=self.log), ["openAIP"]
+            else:
+                self._failed[key] = ("Outside the USA: enter a free openAIP API key (openaip.net) to download "
+                                     "airspace automatically, or use an airspace layer / file.")
+                self.status = self._failed[key]
+                return [], []
+            if not asp and usa:
+                raise IOError("no data returned (offline?)")
+        except Exception as e:
+            self._failed[key] = "Airspace download failed: %s" % e
+            self.status = self._failed[key]
+            return [], []
+        self.box, self.airspaces, self.sources = box, asp, src
+        self.status = "%d airspace(s) downloaded from %s for the project area." % (
+            len([a for a in asp if a.category != "ignore"]), ", ".join(src))
+        return asp, src

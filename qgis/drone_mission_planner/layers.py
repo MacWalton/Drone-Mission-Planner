@@ -19,6 +19,7 @@ PHOTOS = "Photo centres"
 FOOTPRINT = "Corridor footprint"
 FOOTPRINTS = "Image footprints"
 AIRSPACE = "Airspace"
+COVERAGE = "Mission footprint"
 CHAINAGE = "Chainage"
 TERRAIN = "Terrain warnings"
 
@@ -64,7 +65,7 @@ def get_or_create(name, geom, crs, fields, style=None):
         if style:
             style(lyr)
         project().addMapLayer(lyr, False)
-        if name in (FOOTPRINTS, AIRSPACE):     # under the flight lines
+        if name in (FOOTPRINTS, AIRSPACE, COVERAGE):     # under the flight lines
             group().addLayer(lyr)
         else:
             group().insertLayer(0, lyr)
@@ -137,12 +138,12 @@ def _style_photos(l):
 
 
 def _style_site(l):
-    tk = QgsMarkerSymbol.createSimple({"name": "triangle", "color": "40,200,60",
-                                       "outline_color": "0,0,0", "size": "5"})
-    st = QgsMarkerSymbol.createSimple({"name": "triangle", "color": "30,130,230",
-                                       "outline_color": "0,0,0", "size": "4.5"})
-    ld = QgsMarkerSymbol.createSimple({"name": "square", "color": "220,40,40",
-                                       "outline_color": "0,0,0", "size": "4.5"})
+    tk = QgsMarkerSymbol.createSimple({"name": "circle", "color": "225,29,29",
+                                       "outline_color": "255,255,255", "outline_width": "0.4", "size": "4"})
+    st = QgsMarkerSymbol.createSimple({"name": "circle", "color": "225,29,29",
+                                       "outline_color": "255,255,255", "outline_width": "0.4", "size": "3.4"})
+    ld = QgsMarkerSymbol.createSimple({"name": "square", "color": "40,40,40",
+                                       "outline_color": "255,255,255", "size": "3.6"})
     l.setRenderer(QgsCategorizedSymbolRenderer("role", [
         QgsRendererCategory("takeoff", tk, "Take-off (S1)"),
         QgsRendererCategory("station", st, "Launch station"),
@@ -275,4 +276,18 @@ def airspace_layer(airspaces):
         g = QgsGeometry.fromPolygonXY([[QgsPointXY(*p) for p in r] for r in a.rings[:1]])
         rows.append((g, [a.name, a.label, a.cls, a.kind, a.limits_text, a.category, a.source]))
     add(lyr, rows)
+    return lyr
+
+
+def _style_coverage(l):
+    l.renderer().setSymbol(QgsFillSymbol.createSimple(
+        {"style": "no", "color": "0,0,0,0", "outline_color": "250,204,21", "outline_width": "0.9"}))
+
+
+def coverage_layer(crs):
+    """'Mission footprint': extent of all photo footprints - yellow outline, no fill."""
+    lyr = get_or_create(COVERAGE, "Polygon", crs, [("area_ha", T_DBL), ("photos", T_INT)], _style_coverage)
+    if lyr.crs() != crs:
+        clear(lyr)
+        lyr.setCrs(crs)
     return lyr

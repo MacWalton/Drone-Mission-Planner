@@ -356,6 +356,12 @@ class MissionDock(QDockWidget):
         self.stop_hover.setEnabled(False)
         self.portrait = QCheckBox("Camera in portrait (short side across track)")
         f.addRow(self.portrait)
+        self.indiv_fp = QCheckBox("Calculate individual photo footprints (slower; mission footprint is always shown)")
+        self.indiv_fp.setChecked(QSettings().value("dmp/indiv_fp", False, type=bool))
+        self.indiv_fp.setToolTip("Adds the 'Image footprints' layer: one rectangle per photo. Off by default - the "
+                                 "yellow 'Mission footprint' outline shows the total ground covered.")
+        self.indiv_fp.toggled.connect(lambda v: (QSettings().setValue("dmp/indiv_fp", bool(v)), self._param_changed()))
+        f.addRow(self.indiv_fp)
         lay.addWidget(g)
 
         # ---- 6. Conditions
@@ -478,7 +484,8 @@ class MissionDock(QDockWidget):
         g = QgsCollapsibleGroupBox("Airspace check (aeronautical charts data)")
         f = QFormLayout(g)
         self.asp_src = QComboBox()
-        for label, key in (("Off", "none"), ("Airspace layer in this project", "layer"),
+        for label, key in (("Automatic – download for the project area (FAA in USA, openAIP elsewhere)", "auto"),
+                           ("Off", "none"), ("Airspace layer in this project", "layer"),
                            ("File – OpenAir / GeoJSON / ED-269 UAS zones", "file"),
                            ("Download – FAA (USA, no key)", "faa"),
                            ("Download – openAIP (worldwide, free API key)", "openaip")):
@@ -516,7 +523,14 @@ class MissionDock(QDockWidget):
         self.asp_lbl.setStyleSheet("color: gray")
         f.addRow(self.asp_lbl)
         self._airspaces, self._asp_sources = [], []
+        self._auto_asp = core.airspace.AutoAirspace()
+        saved_src = QSettings().value("dmp/airspace_source", "auto")
+        self.asp_src.setCurrentIndex(max(0, self.asp_src.findData(saved_src)))
         self.asp_src.currentIndexChanged.connect(self._asp_src_changed)
+        self.asp_src.currentIndexChanged.connect(
+            lambda *_: QSettings().setValue("dmp/airspace_source", self.asp_src.currentData()))
+        self.asp_key.editingFinished.connect(lambda: (QSettings().setValue("dmp/openaip_key", self.asp_key.text().strip()),
+                                                      self._param_changed()))
         self.asp_layer.layerChanged.connect(lambda *_: self.load_airspace(quiet=True) if self.asp_src.currentData() == "layer" else None)
         self.asp_near.valueChanged.connect(self._param_changed)
         g.setCollapsed(True)
@@ -678,9 +692,12 @@ class MissionDock(QDockWidget):
         k = self.asp_src.currentData()
         self.asp_layer.setEnabled(k == "layer")
         self.asp_file.setEnabled(k == "file")
-        self.asp_key.setEnabled(k == "openaip")
+        self.asp_key.setEnabled(k in ("openaip", "auto"))
         self.asp_btn.setEnabled(k != "none")
-        self.asp_btn.setText({"layer": "Use layer", "file": "Load file"}.get(k, "Download for the mission area"))
+        self.asp_btn.setText({"layer": "Use layer", "file": "Load file", "auto": "Download again now"}.get(
+            k, "Download for the mission area"))
+        if k == "auto":
+            self.asp_lbl.setText("Airspace is downloaded automatically for the project area when you plan.")
         if k == "none" and getattr(self, "_airspaces", None):
             self._airspaces, self._asp_sources = [], []
             self.asp_lbl.setText("Not checked.")
@@ -743,6 +760,12 @@ class MissionDock(QDockWidget):
 
     def load_airspace(self, quiet=False):
         k = self.asp_src.currentData()
+        if k == "auto":                      # forget the cache and download again on the next plan
+            self._auto_asp = core.airspace.AutoAirspace()
+            self._param_changed()
+            if self.mission is None and not quiet:
+                self._warn("Plan the mission first - airspace is downloaded for its area.")
+            return
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             try:
@@ -1573,6 +1596,21 @@ class MissionDock(QDockWidget):
                     limit = self._m(self.min_agl) - 0.5
                 core.terrain.analyse(m, dem, limit, self._m(self.tagl))
             core.daylight.analyse(m, self._to84_for(work), self.min_sun.value())
+            if self.asp_src.currentData() == "auto":
+                to84w = self._to84_for(work)
+                ll = [to84w(w.x, w.y) for f in m.flights for w in f.waypoints[::5]] + [to84w(*q) for q in m.stations]
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+                try:
+                    before = id(self._auto_asp.airspaces)
+                    asp, srcs = self._auto_asp.get(ll, self.asp_key.text().strip())
+                finally:
+                    QApplication.restoreOverrideCursor()
+                self._airspaces, self._asp_sources = asp, srcs
+                if id(self._auto_asp.airspaces) != before:
+                    L.airspace_layer(asp)
+                if not asp:
+                    self.asp_lbl.setText(self._auto_asp.status)
+                    m.warnings.append("AIRSPACE: not checked - " + self._auto_asp.status)
             if self._airspaces:
                 back = L.transform(WGS84, work)
 
@@ -1637,15 +1675,34 @@ class MissionDock(QDockWidget):
                             [f.index + 1, i, w.kind, round(w.alt, 1), round(w.speed, 1),
                              round(w.photo_dist, 1)]))
         L.add(out[L.WAYPOINTS], wps)
-        fps = m.photo_footprints()
-        if len(fps) <= 20000:
-            L.add(out[L.PHOTOS], [(QgsGeometry.fromPointXY(QgsPointXY(f["x"], f["y"])), [f["n"]]) for f in fps])
-            L.add(out[L.FOOTPRINTS], [(QgsGeometry.fromPolygonXY([[QgsPointXY(*q) for q in f["ring"]]]),
-                                       [f["flight"], f["n"], round(f["agl_m"], 1), round(f["gsd_cm"], 2),
-                                        round(f["across_m"], 1), round(f["along_m"], 1),
-                                        round(f["heading_deg"], 1)]) for f in fps])
+        cov = m.coverage
+        cl = L.coverage_layer(crs)
+        L.clear(cl)
+        if cov["rings"]:
+            outer = [r for r in cov["rings"] if core.footprints._area(r[:-1]) > 0]
+            holes = [r for r in cov["rings"] if core.footprints._area(r[:-1]) <= 0]
+            geoms = []
+            for r in outer:
+                g = QgsGeometry.fromPolygonXY([[QgsPointXY(*q) for q in r]])
+                for h in holes:
+                    hg = QgsGeometry.fromPolygonXY([[QgsPointXY(*q) for q in h]])
+                    if g.contains(hg.centroid()):
+                        g = g.difference(hg)
+                geoms.append(g)
+            L.add(cl, [(g, [round(cov["area_m2"] / 1e4, 3), cov["photos"]]) for g in geoms])
+        if self.indiv_fp.isChecked():
+            fps = m.photo_footprints()
+            if len(fps) <= 20000:
+                L.add(out[L.PHOTOS], [(QgsGeometry.fromPointXY(QgsPointXY(f["x"], f["y"])), [f["n"]]) for f in fps])
+                L.add(out[L.FOOTPRINTS], [(QgsGeometry.fromPolygonXY([[QgsPointXY(*q) for q in f["ring"]]]),
+                                           [f["flight"], f["n"], round(f["agl_m"], 1), round(f["gsd_cm"], 2),
+                                            round(f["across_m"], 1), round(f["along_m"], 1),
+                                            round(f["heading_deg"], 1)]) for f in fps])
+            else:
+                self.msg("%d photos - individual footprints are not drawn above 20 000." % len(fps))
         else:
-            self.msg("%d photos - photo centres and image footprints are not drawn above 20 000." % len(fps))
+            L.add(out[L.PHOTOS], [(QgsGeometry.fromPointXY(QgsPointXY(*p)), [i + 1])
+                                  for i, p in enumerate(m.photo_points()[:20000])])
         # terrain problem spots
         tl = L.terrain_layer(crs)
         L.clear(tl)

@@ -156,6 +156,19 @@ class Mission:
         from .footprints import photo_footprints
         return photo_footprints(self, ground)
 
+    @property
+    def coverage(self):
+        """Footprint extent of all photos: {'rings', 'area_m2', 'photos'} (cached)."""
+        key = (id(getattr(self, "ground", None)), len(self.flights), self.trigger_m)
+        if getattr(self, "_cov_key", None) != key:
+            from .footprints import coverage_extent
+            try:
+                self._cov = coverage_extent(self)
+            except Exception:
+                self._cov = {"rings": [], "area_m2": 0.0, "photos": 0}
+            self._cov_key = key
+        return self._cov
+
     def chainage_markers(self, interval=100.0):
         if not self.centreline:
             return []
@@ -220,6 +233,7 @@ class Mission:
                 self.conditions.wind_from_deg, self.conditions.temperature_c),
             "Photo trigger     : %s" % self.trigger_text(),
             "Photos (approx.)  : %d" % self.photos,
+            "Image coverage    : %.2f ha (extent of all photo footprints)" % (self.coverage["area_m2"] / 1e4),
             "Survey legs       : %d" % len(self.lines),
             "Total flight time : %dh %02dm" % (h, m),
             "Flights/batteries : %d   Launch stations: %d" % (len(self.flights), len(self.stations)),

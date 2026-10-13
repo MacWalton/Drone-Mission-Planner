@@ -52,3 +52,12 @@ d = run2(T.AreaMission(), {"aircraft": "DJI Matrice 4E"}, in_features="boundary"
 msgs = [m for l, m in arcpy.MSGS]
 print(" ", [m for m in msgs if "Date" in m or "Best light" in m or "DAYLIGHT" in m or "Daylight" in m][:4])
 assert any("Flight date & light" in m for m in msgs) and any("DAYLIGHT" in m for m in msgs)
+
+print("== mission footprint (always) and individual footprints (only when ticked)")
+for indiv in (False, True):
+    d = run2(T.AreaMission(), {"aircraft": "DJI Matrice 4E"}, in_features="boundary", takeoff="tk", out_gdb=gdb, gsd=2.5,
+             individual_footprints=indiv, asp_source="Off")
+    fp = arcpy.FCS[d["out_footprint"].value]["rows"]
+    ind = arcpy.FCS[d["out_footprints"].value]["rows"] if d["out_footprints"].value else []
+    print("  individual=%s -> footprint rows %d (%.1f ha), individual rows %d" % (indiv, len(fp), fp[0][1], len(ind)))
+    assert len(fp) == 1 and (len(ind) > 50) == indiv

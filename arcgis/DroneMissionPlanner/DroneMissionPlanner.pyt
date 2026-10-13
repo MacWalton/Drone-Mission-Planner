@@ -41,7 +41,7 @@ TRIGGERS = {"Distance - camera fires every N m (autopilots, Pilot 2, Litchi)": "
             "Stop & shoot - hover at every photo point": "stop"}
 TRIGGER_LABELS = {v: k for k, v in TRIGGERS.items()}
 WIND_UNITS = {"Knots": "kn", "m/s": "m/s", "km/h": "km/h"}
-ASP_SOURCES = ["Off", "Airspace layer", "File (OpenAir / GeoJSON / ED-269)", "Download - FAA (USA)",
+ASP_SOURCES = ["Automatic (FAA in USA, openAIP elsewhere)", "Off", "Airspace layer", "File (OpenAir / GeoJSON / ED-269)", "Download - FAA (USA)",
                "Download - openAIP (worldwide, API key)"]
 BASEMAPS = ["Current map basemap", "OpenStreetMap", "Esri World Imagery", "Esri World Topographic", "None"]
 SHUTTERS = ["1/500", "1/800", "1/1000", "1/1600", "1/2000", "1/3200"]
@@ -416,6 +416,13 @@ def _read_airspace(p, bbox84):
         if not f:
             raise arcpy.ExecuteError("Choose the airspace file.")
         return core.airspace.load_file(f), [os.path.basename(f)]
+    if src.startswith("Automatic"):
+        corners = [(bbox84[0], bbox84[1]), (bbox84[2], bbox84[3])]
+        auto = core.airspace.AutoAirspace(log=_msg)
+        asp, srcs = auto.get(corners, p["openaip_key"].valueAsText or "")
+        if not asp:
+            _warn("Airspace: " + auto.status)
+        return asp, srcs
     if "FAA" in src:
         return core.airspace.fetch_faa(bbox84, log=_msg), ["FAA"]
     return core.airspace.fetch_openaip(bbox84, p["openaip_key"].valueAsText or "", log=_msg), ["openAIP"]
@@ -818,6 +825,8 @@ class _MissionTool(object):
         ps += [_param("out_crs", "Coordinate system (blank = automatic UTM)", "GPCoordinateSystem",
                       "Optional", category=cat),
                _param("out_gdb", "Output geodatabase", "DEWorkspace", category=cat),
+               _param("individual_footprints", "Also calculate individual photo footprints (slower)", "GPBoolean",
+                      value=False, category=cat),
                _param("out_name", "Output name prefix", "GPString",
                       value="route_mission" if r else "area_mission", category=cat)]
         cat = "Export & upload"
@@ -840,7 +849,8 @@ class _MissionTool(object):
                                 ("out_routes", "Flight routes", "DEFeatureClass"),
                                 ("out_waypoints", "Waypoints", "DEFeatureClass"),
                                 ("out_photos", "Photo centres", "DEFeatureClass"),
-                                ("out_footprints", "Image footprints", "DEFeatureClass"),
+                                ("out_footprint", "Mission footprint (extent of all photos)", "DEFeatureClass"),
+                                ("out_footprints", "Individual photo footprints", "DEFeatureClass"),
                                 ("out_site", "Launch stations and landing", "DEFeatureClass"),
                                 ("out_chainage", "Chainage markers", "DEFeatureClass"),
                                 ("out_schedule", "Flight & battery schedule", "DETable"),
@@ -1088,9 +1098,14 @@ class _MissionTool(object):
                 raise
             except Exception as e:
                 raise arcpy.ExecuteError("Airspace not loaded: %s" % e)
-            _msg("Airspace: %d loaded from %s" % (len([a for a in asp if a.category != "ignore"]), ", ".join(srcs)))
-            core.airspace.check(mission, asp, to84a, _from_wgs84_fn(work_sr), float(_val(p, "asp_near", 1000)),
-                                sources=srcs)
+            if asp:
+                _msg("Airspace: %d loaded from %s" % (len([a for a in asp if a.category != "ignore"]),
+                                                      ", ".join(srcs)))
+                core.airspace.check(mission, asp, to84a, _from_wgs84_fn(work_sr), float(_val(p, "asp_near", 1000)),
+                                    sources=srcs)
+            else:
+                mission.warnings.append("AIRSPACE: not checked - no airspace data for this area (see the airspace "
+                                        "message above).")
         for line in mission.report().splitlines():
             (_warn if line.startswith("WARNING") else _msg)(line)
 
@@ -1100,7 +1115,8 @@ class _MissionTool(object):
         if prefix in ("area_mission", "route_mission"):        # default prefix -> follow the name
             prefix = core.safe_filename(mission.params.mission_name, prefix)
         out = self._write_outputs(mission, gdb, prefix, work_sr,
-                                  float(_val(p, "kp_interval", 0)) if self.route else 0)
+                                  float(_val(p, "kp_interval", 0)) if self.route else 0,
+                                  bool(_val(p, "individual_footprints", False)))
         out.update(self._write_terrain(mission, gdb, prefix, work_sr))
         out.update(self._write_airspace(mission, gdb, prefix))
         for key, path in out.items():
@@ -1150,7 +1166,7 @@ class _MissionTool(object):
         return
 
     @staticmethod
-    def _write_outputs(m, gdb, prefix, sr, kp_interval=0):
+    def _write_outputs(m, gdb, prefix, sr, kp_interval=0, individual=False):
         out = {}
         A = arcpy.Array
         Pt = arcpy.Point
@@ -1208,23 +1224,33 @@ class _MissionTool(object):
                                    round(w.speed, 1), round(w.photo_dist, 1)])
         out["out_waypoints"] = path
 
-        fps = m.photo_footprints()
+        fps = m.photo_footprints() if individual else None
         path = _new_fc(gdb, prefix + "_photos", "POINT", sr, [("n", "LONG"), ("flight", "LONG")])
         with arcpy.da.InsertCursor(path, ["SHAPE@XY", "n", "flight"]) as cur:
-            for f in fps:
+            for f in (fps or ({"x": q[0], "y": q[1], "n": i + 1, "flight": None}
+                              for i, q in enumerate(m.photo_points()))):
                 cur.insertRow([(f["x"], f["y"]), f["n"], f["flight"]])
         out["out_photos"] = path
 
-        path = _new_fc(gdb, prefix + "_footprints", "POLYGON", sr,
-                       [("flight", "LONG"), ("photo", "LONG"), ("agl_m", "DOUBLE"), ("gsd_cm", "DOUBLE"),
-                        ("across_m", "DOUBLE"), ("along_m", "DOUBLE"), ("heading", "DOUBLE")])
-        with arcpy.da.InsertCursor(path, ["SHAPE@", "flight", "photo", "agl_m", "gsd_cm", "across_m",
-                                          "along_m", "heading"]) as cur:
-            for f in fps:
-                cur.insertRow([arcpy.Polygon(A([Pt(*q) for q in f["ring"]]), sr), f["flight"], f["n"],
-                               round(f["agl_m"], 1), round(f["gsd_cm"], 2), round(f["across_m"], 1),
-                               round(f["along_m"], 1), round(f["heading_deg"], 1)])
-        out["out_footprints"] = path
+        cov = m.coverage                        # mission footprint: extent of all photos
+        path = _new_fc(gdb, prefix + "_footprint", "POLYGON", sr, [("area_ha", "DOUBLE"), ("photos", "LONG")])
+        if cov["rings"]:
+            with arcpy.da.InsertCursor(path, ["SHAPE@", "area_ha", "photos"]) as cur:
+                cur.insertRow([arcpy.Polygon(A([A([Pt(*q) for q in r]) for r in cov["rings"]]), sr),
+                               round(cov["area_m2"] / 1e4, 3), cov["photos"]])
+        out["out_footprint"] = path
+        if individual:
+
+            path = _new_fc(gdb, prefix + "_footprints", "POLYGON", sr,
+                           [("flight", "LONG"), ("photo", "LONG"), ("agl_m", "DOUBLE"), ("gsd_cm", "DOUBLE"),
+                            ("across_m", "DOUBLE"), ("along_m", "DOUBLE"), ("heading", "DOUBLE")])
+            with arcpy.da.InsertCursor(path, ["SHAPE@", "flight", "photo", "agl_m", "gsd_cm", "across_m",
+                                              "along_m", "heading"]) as cur:
+                for f in fps:
+                    cur.insertRow([arcpy.Polygon(A([Pt(*q) for q in f["ring"]]), sr), f["flight"], f["n"],
+                                   round(f["agl_m"], 1), round(f["gsd_cm"], 2), round(f["across_m"], 1),
+                                   round(f["along_m"], 1), round(f["heading_deg"], 1)])
+            out["out_footprints"] = path
 
         path = _new_fc(gdb, prefix + "_site", "POINT", sr,
                        [("role", "TEXT"), ("name", "TEXT"), ("flights", "LONG")])
