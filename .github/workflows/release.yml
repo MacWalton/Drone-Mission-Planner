@@ -36,8 +36,9 @@ jobs:
           TAG="${RELEASE_TAG#v}"
           META=$(grep '^version=' qgis/drone_mission_planner/metadata.txt | cut -d= -f2)
           CORE=$(python -c "import dronemapper_core as c; print(c.__version__)")
-          echo "tag $TAG  metadata $META  core $CORE"
-          [ "$TAG" = "$META" ] && [ "$TAG" = "$CORE" ]
+          PYT=$(grep '^TOOLBOX_VERSION' arcgis/DroneMissionPlanner/DroneMissionPlanner.pyt | cut -d'"' -f2)
+          echo "tag $TAG  metadata $META  core $CORE  toolbox $PYT"
+          [ "$TAG" = "$META" ] && [ "$TAG" = "$CORE" ] && [ "$TAG" = "$PYT" ]
       - run: python tools/build.py
       - name: Engine tests
         working-directory: tests

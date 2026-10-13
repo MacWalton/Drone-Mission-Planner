@@ -28,10 +28,30 @@ import sys
 import arcpy
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:
-    sys.path.insert(0, _HERE)
+TOOLBOX_VERSION = "1.12.1"
 
-import dronemapper_core as core
+
+def _load_core():
+    """Import the dronemapper_core folder that sits next to this toolbox - always.
+    ArcGIS Pro keeps modules in memory for the whole session, so after updating the
+    toolbox an older engine (or another copy on the Python path) would otherwise be used."""
+    for name in [n for n in list(sys.modules) if n == "dronemapper_core" or n.startswith("dronemapper_core.")]:
+        del sys.modules[name]
+    while _HERE in sys.path:
+        sys.path.remove(_HERE)
+    sys.path.insert(0, _HERE)
+    import dronemapper_core as c
+    where = os.path.dirname(os.path.dirname(os.path.abspath(c.__file__)))
+    if os.path.normcase(where) != os.path.normcase(_HERE) or getattr(c, "__version__", "") != TOOLBOX_VERSION:
+        raise ImportError(
+            "Drone Mission Planner: the planning engine found is version %s at %s, but this toolbox is version %s. "
+            "Copy the whole DroneMissionPlanner folder from the release zip (DroneMissionPlanner.pyt together with "
+            "its dronemapper_core folder), then restart ArcGIS Pro."
+            % (getattr(c, "__version__", "?"), where, TOOLBOX_VERSION))
+    return c
+
+
+core = _load_core()
 from dronemapper_core import exporters, uploader, photogrammetry as P
 
 WGS84 = arcpy.SpatialReference(4326)

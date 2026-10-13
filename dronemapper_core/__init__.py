@@ -14,7 +14,7 @@ from .logistics import LogisticsParams, build_schedule, clock
 from . import photogrammetry, geometry, exporters, uploader, logistics, dem, terrain, units, obstacles, basemap, footprints, daylight, airspace
 from .obstacles import Obstacle, ObstacleSet
 
-__version__ = "1.12.0"
+__version__ = "1.12.1"
 
 
 def utm_epsg(lon, lat):

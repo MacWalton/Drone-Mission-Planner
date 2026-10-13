@@ -10,7 +10,7 @@ Download the install zips from the repository's **Releases** page, or build them
 | Package | Install |
 |---|---|
 | `drone_mission_planner_qgis.zip` | QGIS 3.22+ (Qt5) and QGIS 4 (Qt6): **Plugins ▸ Manage and Install Plugins ▸ Install from ZIP**. A toolbar button opens the planner panel. |
-| `DroneMissionPlanner_ArcGISPro.zip` | ArcGIS Pro 2.9+: unzip anywhere, then **Catalog ▸ Toolboxes ▸ Add Toolbox** and pick `DroneMissionPlanner.pyt` (keep the `dronemapper_core` folder next to it). |
+| `DroneMissionPlanner_ArcGISPro.zip` | ArcGIS Pro 2.9+: unzip anywhere, then **Catalog ▸ Toolboxes ▸ Add Toolbox** and pick `DroneMissionPlanner.pyt` (keep the `dronemapper_core` folder next to it). **Updating:** replace the whole `DroneMissionPlanner` folder and restart ArcGIS Pro. |
 
 Live MAVLink upload needs **pymavlink** (optional):
 - QGIS: open the *OSGeo4W Shell* → `python -m pip install pymavlink`, restart QGIS.
@@ -592,8 +592,8 @@ python tests/run_tests.py core     # engine + ArcGIS stand-in tests (pyproj; DEM
 python tests/run_tests.py          # everything, run with QGIS's Python for the QGIS UI tests
 ```
 
-**Releasing:** bump `version=` in `qgis/drone_mission_planner/metadata.txt` and `__version__` in
-`dronemapper_core/__init__.py`, add `docs/releases/vX.Y.Z.md`, then either `git tag vX.Y.Z && git push origin vX.Y.Z` or *GitHub ▸ Actions ▸ release ▸ Run workflow*.
+**Releasing:** bump `version=` in `qgis/drone_mission_planner/metadata.txt`, `__version__` in
+`dronemapper_core/__init__.py` and `TOOLBOX_VERSION` in `DroneMissionPlanner.pyt`, add `docs/releases/vX.Y.Z.md`, then either `git tag vX.Y.Z && git push origin vX.Y.Z` or *GitHub ▸ Actions ▸ release ▸ Run workflow*.
 The *release* workflow checks the versions match, runs the engine tests, builds both zips and publishes the
 GitHub release with those notes.
 

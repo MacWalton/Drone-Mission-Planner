@@ -61,3 +61,14 @@ for indiv in (False, True):
     ind = arcpy.FCS[d["out_footprints"].value]["rows"] if d["out_footprints"].value else []
     print("  individual=%s -> footprint rows %d (%.1f ha), individual rows %d" % (indiv, len(fp), fp[0][1], len(ind)))
     assert len(fp) == 1 and (len(ind) > 50) == indiv
+
+print("== stale engine already in memory (ArcGIS Pro session after an update) is replaced")
+import types
+stale = types.ModuleType("dronemapper_core"); stale.__version__ = "1.11.0"; stale.__file__ = "/old/place/dronemapper_core/__init__.py"
+for n in [n for n in list(sys.modules) if n.startswith("dronemapper_core")]:
+    del sys.modules[n]
+sys.modules["dronemapper_core"] = stale
+loader2 = importlib.machinery.SourceFileLoader("dmp_fresh", pyt)
+spec2 = importlib.util.spec_from_loader("dmp_fresh", loader2); T2 = importlib.util.module_from_spec(spec2); loader2.exec_module(T2)
+print("  engine now:", T2.core.__version__, "| has coverage:", hasattr(T2.core.planner.Mission, "coverage"))
+assert T2.core.__version__ == T2.TOOLBOX_VERSION and hasattr(T2.core.planner.Mission, "coverage")
